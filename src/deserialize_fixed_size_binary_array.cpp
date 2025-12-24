@@ -1,4 +1,4 @@
-#include "sparrow_ipc/deserialize_fixedsizebinary_array.hpp"
+#include "sparrow_ipc/deserialize_fixed_size_binary_array.hpp"
 
 #include <unordered_set>
 

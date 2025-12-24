@@ -15,7 +15,7 @@
 
 #include "sparrow_ipc/deserialize_decimal_array.hpp"
 #include "sparrow_ipc/deserialize_duration_array.hpp"
-#include "sparrow_ipc/deserialize_fixedsizebinary_array.hpp"
+#include "sparrow_ipc/deserialize_fixed_size_binary_array.hpp"
 #include "sparrow_ipc/deserialize_interval_array.hpp"
 #include "sparrow_ipc/deserialize_null_array.hpp"
 #include "sparrow_ipc/deserialize_primitive_array.hpp"
