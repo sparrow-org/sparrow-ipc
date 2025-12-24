@@ -23,7 +23,7 @@ namespace sparrow_ipc
             const std::vector<uint8_t> empty_data;
             const auto compression_type = T::type;
 
-            CHECK_THROWS_WITH_AS(decompress(compression_type, empty_data), "Trying to decompress empty data.", std::runtime_error);
+            CHECK_THROWS_WITH_AS((void)decompress(compression_type, empty_data), "Trying to decompress empty data.", std::runtime_error);
         }
 
         TEST_CASE_TEMPLATE("Empty data", T, Lz4Compression, ZstdCompression)

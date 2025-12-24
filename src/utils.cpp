@@ -4,37 +4,38 @@
 
 namespace sparrow_ipc::utils
 {
-    std::optional<std::string_view> parse_after_separator(std::string_view format_str, std::string_view sep)
+    std::optional<std::string_view> get_substr_after_separator(std::string_view str, std::string_view sep)
     {
-        const auto sep_pos = format_str.find(sep);
+        const auto sep_pos = str.find(sep);
         if (sep_pos == std::string_view::npos)
         {
             return std::nullopt;
         }
-        return format_str.substr(sep_pos + sep.length());
+        return str.substr(sep_pos + sep.length());
     }
 
-    std::optional<int32_t> parse_format(std::string_view format_str, std::string_view sep)
+    std::optional<int32_t> parse_to_int32(std::string_view str)
     {
-        const auto substr_opt = parse_after_separator(format_str, sep);
+        int32_t value = 0;
+        const auto [ptr, ec] = std::from_chars(str.data(), str.data() + str.size(), value);
+
+        if (ec != std::errc() || ptr != str.data() + str.size())
+        {
+            return std::nullopt;
+        }
+        return value;
+    }
+
+    std::optional<int32_t> get_substr_as_int32(std::string_view str, std::string_view sep)
+    {
+        const auto substr_opt = get_substr_after_separator(str, sep);
         if (!substr_opt)
         {
             return std::nullopt;
         }
+
         const auto& substr_str = substr_opt.value();
-
-        int32_t substr_size = 0;
-        const auto [ptr, ec] = std::from_chars(
-            substr_str.data(),
-            substr_str.data() + substr_str.size(),
-            substr_size
-        );
-
-        if (ec != std::errc() || ptr != substr_str.data() + substr_str.size())
-        {
-            return std::nullopt;
-        }
-        return substr_size;
+        return parse_to_int32(substr_str);
     }
 
     std::optional<std::tuple<int32_t, int32_t, std::optional<int32_t>>> parse_decimal_format(std::string_view format_str)
@@ -59,13 +60,8 @@ namespace sparrow_ipc::utils
 
         // Parse precision
         std::string_view precision_str(params_str.data(), first_comma_pos);
-        int32_t precision = 0;
-        auto [ptr1, ec1] = std::from_chars(
-            precision_str.data(),
-            precision_str.data() + precision_str.size(),
-            precision
-        );
-        if (ec1 != std::errc() || ptr1 != precision_str.data() + precision_str.size())
+        auto precision = parse_to_int32(precision_str);
+        if (!precision)
         {
             return std::nullopt;
         }
@@ -90,32 +86,22 @@ namespace sparrow_ipc::utils
                                          remaining_str.size() - second_comma_pos - 1);
 
             // Parse bitWidth
-            int32_t bw = 0;
-            auto [ptr3, ec3] = std::from_chars(
-                bitwidth_str.data(),
-                bitwidth_str.data() + bitwidth_str.size(),
-                bw
-            );
-            if (ec3 != std::errc() || ptr3 != bitwidth_str.data() + bitwidth_str.size())
+            auto bw = parse_to_int32(bitwidth_str);
+            if (!bw)
             {
                 return std::nullopt;
             }
-            bit_width = bw;
+            bit_width = *bw;
         }
 
         // Parse scale
-        int32_t scale = 0;
-        auto [ptr2, ec2] = std::from_chars(
-            scale_str.data(),
-            scale_str.data() + scale_str.size(),
-            scale
-        );
-        if (ec2 != std::errc() || ptr2 != scale_str.data() + scale_str.size())
+        auto scale = parse_to_int32(scale_str);
+        if (!scale)
         {
             return std::nullopt;
         }
 
-        return std::make_tuple(precision, scale, bit_width);
+        return std::make_tuple(*precision, *scale, bit_width);
     }
 
     std::vector<std::string_view> extract_words_after_colon(std::string_view str)
@@ -153,17 +139,5 @@ namespace sparrow_ipc::utils
         result.push_back(remaining.substr(start));
 
         return result;
-    }
-
-    std::optional<int32_t> parse_to_int32(std::string_view str)
-    {
-        int32_t value = 0;
-        const auto [ptr, ec] = std::from_chars(str.data(), str.data() + str.size(), value);
-
-        if (ec != std::errc() || ptr != str.data() + str.size())
-        {
-            return std::nullopt;
-        }
-        return value;
     }
 }

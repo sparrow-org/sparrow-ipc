@@ -17,7 +17,7 @@ namespace sparrow_ipc
             std::string_view format_str,
             org::apache::arrow::flatbuf::TimeUnit time_unit)
         {
-            const auto timezone = utils::parse_after_separator(format_str, ":");
+            const auto timezone = utils::get_substr_after_separator(format_str, ":");
             flatbuffers::Offset<flatbuffers::String> timezone_offset = 0;
             if (timezone.has_value() && !timezone.value().empty())
             {
@@ -305,7 +305,7 @@ namespace sparrow_ipc
             {
                 // FixedSizeList requires listSize. We need to parse the format_str.
                 // Format: "+w:size"
-                const auto list_size = utils::parse_format(format_str, ":");
+                const auto list_size = utils::get_substr_as_int32(format_str, ":");
                 if (!list_size.has_value())
                 {
                     throw std::runtime_error(
@@ -373,7 +373,7 @@ namespace sparrow_ipc
             {
                 // FixedSizeBinary requires byteWidth. We need to parse the format_str.
                 // Format: "w:size"
-                const auto byte_width = utils::parse_format(format_str, ":");
+                const auto byte_width = utils::get_substr_as_int32(format_str, ":");
                 if (!byte_width.has_value())
                 {
                     throw std::runtime_error(

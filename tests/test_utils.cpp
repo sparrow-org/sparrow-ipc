@@ -15,6 +15,101 @@ namespace sparrow_ipc
         CHECK_EQ(utils::align_to_8(16), 16);
     }
 
+    TEST_CASE("get_substr_after_separator")
+    {
+        SUBCASE("Basic case")
+        {
+            auto result = utils::get_substr_after_separator("w:abc", ":");
+            REQUIRE(result.has_value());
+            CHECK_EQ(result.value(), "abc");
+        }
+
+        SUBCASE("Basic case with number")
+        {
+            auto result = utils::get_substr_after_separator("w:123", ":");
+            REQUIRE(result.has_value());
+            CHECK_EQ(result.value(), "123");
+        }
+
+        SUBCASE("Multiple separators")
+        {
+            auto result = utils::get_substr_after_separator("w:1:23", ":");
+            REQUIRE(result.has_value());
+            CHECK_EQ(result.value(), "1:23");
+        }
+
+        SUBCASE("Wrong separator")
+        {
+            auto result = utils::get_substr_after_separator("w:123", ",");
+            CHECK_FALSE(result.has_value());
+        }
+
+        SUBCASE("Empty")
+        {
+            auto result = utils::get_substr_after_separator("", ":");
+            CHECK_FALSE(result.has_value());
+        }
+
+        SUBCASE("Nothing after existing separator")
+        {
+            auto result = utils::get_substr_after_separator("w:", ":");
+            REQUIRE(result.has_value());
+            CHECK_EQ(result.value(), "");
+        }
+
+        SUBCASE("Without separator")
+        {
+            auto result = utils::get_substr_after_separator("abc", ":");
+            CHECK_FALSE(result.has_value());
+        }
+    }
+
+    TEST_CASE("get_substr_as_int32")
+    {
+        SUBCASE("Basic case")
+        {
+            auto result = utils::get_substr_as_int32("w:123", ":");
+            REQUIRE(result.has_value());
+            CHECK_EQ(result.value(), 123);
+        }
+
+        SUBCASE("Basic case with str")
+        {
+            auto result = utils::get_substr_as_int32("w:abc", ":");
+            CHECK_FALSE(result.has_value());
+        }
+
+        SUBCASE("Multiple separators")
+        {
+            auto result = utils::get_substr_as_int32("w:1:23", ":");
+            CHECK_FALSE(result.has_value());
+        }
+
+        SUBCASE("Wrong separator")
+        {
+            auto result = utils::get_substr_as_int32("w:123", ",");
+            CHECK_FALSE(result.has_value());
+        }
+
+        SUBCASE("Empty")
+        {
+            auto result = utils::get_substr_as_int32("", ":");
+            CHECK_FALSE(result.has_value());
+        }
+
+        SUBCASE("Nothing after existing separator")
+        {
+            auto result = utils::get_substr_as_int32("w:", ":");
+            CHECK_FALSE(result.has_value());
+        }
+
+        SUBCASE("Without separator")
+        {
+            auto result = utils::get_substr_as_int32("123", ":");
+            CHECK_FALSE(result.has_value());
+        }
+    }
+
     TEST_CASE("extract_words_after_colon")
     {
         SUBCASE("Basic case with multiple words")

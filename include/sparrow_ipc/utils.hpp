@@ -11,10 +11,73 @@
 namespace sparrow_ipc::utils
 {
     // Aligns a value to the next multiple of 8, as required by the Arrow IPC format for message bodies
-    inline size_t align_to_8(const size_t n)
+    constexpr size_t align_to_8(const size_t n)
     {
         return (n + 7) & -8;
     }
+
+    /**
+     * @brief Get substring after separator.
+     *
+     * @param str The string view to parse
+     * @param str The separator to use
+     * @return std::optional<std::string_view> The parsed substring, or std::nullopt if parsing fails
+     *
+     * @example
+     * get_substr_after_separator("w:abc", ":") returns std::optional<std::string_view>("abc")
+     * get_substr_after_separator("abc", ":") returns std::nullopt
+     * get_substr_after_separator("", ":") returns std::nullopt
+     */
+    SPARROW_IPC_API std::optional<std::string_view> get_substr_after_separator(std::string_view str, std::string_view sep);
+
+    /**
+     * @brief Parse a string_view to int32_t using std::from_chars.
+     *
+     * This function converts a string view to a 32-bit integer using std::from_chars
+     * for efficient parsing.
+     *
+     * @param str The string view to parse
+     * @return std::optional<int32_t> The parsed integer value, or std::nullopt if parsing fails
+     *
+     * @example
+     * parse_to_int32("123") returns std::optional<int32_t>(123)
+     * parse_to_int32("abc") returns std::nullopt
+     * parse_to_int32("") returns std::nullopt
+     */
+    SPARROW_IPC_API std::optional<int32_t> parse_to_int32(std::string_view str);
+
+    /**
+     * @brief Get substring after separator as int32_t.
+     *
+     * @param str The string view to parse
+     * @param str The separator to use
+     * @return std::optional<int32_t> The parsed substring as integer, or std::nullopt if parsing fails
+     *
+     * @example
+     * get_substr_as_int32("w:123", ":") returns std::optional<int32_t>(123)
+     * get_substr_as_int32("abc", ":") returns std::nullopt
+     * get_substr_as_int32("abc:a", ":") returns std::nullopt
+     * get_substr_as_int32("", ":") returns std::nullopt
+     */
+    SPARROW_IPC_API std::optional<int32_t> get_substr_as_int32(std::string_view str, std::string_view sep);
+
+    /**
+     * @brief Parse decimal format strings.
+     *
+     * This function parses decimal format strings which can be in two formats:
+     * - "d:precision,scale" (e.g., "d:19,10")
+     * - "d:precision,scale,bitWidth" (e.g., "d:19,10,128")
+     *
+     * @param format_str The format string to parse
+     * @return std::optional<std::tuple<int32_t, int32_t, std::optional<int32_t>>>
+     *         A tuple containing (precision, scale, optional bitWidth), or std::nullopt if parsing fails
+     *
+     * @example
+     * parse_decimal_format("d:19,10") returns std::optional{std::tuple{19, 10, std::nullopt}}
+     * parse_decimal_format("d:19,10,128") returns std::optional{std::tuple{19, 10, std::optional{128}}}
+     * parse_decimal_format("invalid") returns std::nullopt
+     */
+    SPARROW_IPC_API std::optional<std::tuple<int32_t, int32_t, std::optional<int32_t>>> parse_decimal_format(std::string_view format_str);
 
     /**
      * @brief Extracts words after ':' separated by ',' from a string.
@@ -32,22 +95,6 @@ namespace sparrow_ipc::utils
      * extract_words_after_colon("no_colon") returns {}
      */
     SPARROW_IPC_API std::vector<std::string_view> extract_words_after_colon(std::string_view str);
-
-    /**
-     * @brief Parse a string_view to int32_t using std::from_chars.
-     *
-     * This function converts a string view to a 32-bit integer using std::from_chars
-     * for efficient parsing.
-     *
-     * @param str The string view to parse
-     * @return std::optional<int32_t> The parsed integer value, or std::nullopt if parsing fails
-     *
-     * @example
-     * parse_to_int32("123") returns std::optional<int32_t>(123)
-     * parse_to_int32("abc") returns std::nullopt
-     * parse_to_int32("") returns std::nullopt
-     */
-    SPARROW_IPC_API std::optional<int32_t> parse_to_int32(std::string_view str);
 
     /**
      * @brief Checks if all record batches in a collection have consistent structure.
@@ -95,28 +142,4 @@ namespace sparrow_ipc::utils
         }
         return true;
     }
-
-    std::optional<std::string_view> parse_after_separator(std::string_view format_str, std::string_view sep);
-    // Parse the format string
-    // The format string is expected to be "w:size", "+w:size", "d:precision,scale", etc
-    std::optional<int32_t> parse_format(std::string_view format_str, std::string_view sep);
-    // size_t calculate_output_serialized_size(const sparrow::record_batch& record_batch);
-
-    /**
-     * @brief Parse decimal format strings.
-     *
-     * This function parses decimal format strings which can be in two formats:
-     * - "d:precision,scale" (e.g., "d:19,10")
-     * - "d:precision,scale,bitWidth" (e.g., "d:19,10,128")
-     *
-     * @param format_str The format string to parse
-     * @return std::optional<std::tuple<int32_t, int32_t, std::optional<int32_t>>>
-     *         A tuple containing (precision, scale, optional bitWidth), or std::nullopt if parsing fails
-     *
-     * @example
-     * parse_decimal_format("d:19,10") returns std::optional{std::tuple{19, 10, std::nullopt}}
-     * parse_decimal_format("d:19,10,128") returns std::optional{std::tuple{19, 10, std::optional{128}}}
-     * parse_decimal_format("invalid") returns std::nullopt
-     */
-    SPARROW_IPC_API std::optional<std::tuple<int32_t, int32_t, std::optional<int32_t>>> parse_decimal_format(std::string_view format_str);
 }
