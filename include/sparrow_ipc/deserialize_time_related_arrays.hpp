@@ -18,7 +18,7 @@
 namespace sparrow_ipc
 {
     template <typename T>
-    [[nodiscard]] sparrow::date_array<T> deserialize_non_owning_date_array(
+    [[nodiscard]] sparrow::date_array<T> deserialize_date_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
         std::string_view name,
@@ -27,7 +27,7 @@ namespace sparrow_ipc
         size_t& buffer_index
     )
     {
-        return detail::deserialize_non_owning_simple_array<sparrow::date_array, T>(
+        return detail::deserialize_simple_array<sparrow::date_array, T>(
             record_batch,
             body,
             name,
@@ -39,7 +39,7 @@ namespace sparrow_ipc
     }
 
     template <typename T>
-    [[nodiscard]] sparrow::timestamp_array<T> deserialize_non_owning_timestamp_array(
+    [[nodiscard]] sparrow::timestamp_array<T> deserialize_timestamp_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
         std::string_view name,
@@ -53,7 +53,7 @@ namespace sparrow_ipc
             sparrow::detail::get_data_type_from_array<sparrow::timestamp_array<T>>::get()
         )) + timezone;
 
-        return detail::deserialize_non_owning_simple_array<sparrow::timestamp_array, T>(
+        return detail::deserialize_simple_array<sparrow::timestamp_array, T>(
             record_batch,
             body,
             name,
@@ -65,7 +65,7 @@ namespace sparrow_ipc
     }
 
     template <typename T>
-    [[nodiscard]] sparrow::timestamp_without_timezone_array<T> deserialize_non_owning_timestamp_without_timezone_array(
+    [[nodiscard]] sparrow::timestamp_without_timezone_array<T> deserialize_timestamp_without_timezone_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
         std::string_view name,
@@ -74,7 +74,7 @@ namespace sparrow_ipc
         size_t& buffer_index
     )
     {
-        return detail::deserialize_non_owning_simple_array<sparrow::timestamp_without_timezone_array, T>(
+        return detail::deserialize_simple_array<sparrow::timestamp_without_timezone_array, T>(
             record_batch,
             body,
             name,
@@ -86,7 +86,7 @@ namespace sparrow_ipc
     }
 
     template <typename T>
-    [[nodiscard]] sparrow::time_array<T> deserialize_non_owning_time_array(
+    [[nodiscard]] sparrow::time_array<T> deserialize_time_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
         std::string_view name,
@@ -95,7 +95,7 @@ namespace sparrow_ipc
         size_t& buffer_index
     )
     {
-        return detail::deserialize_non_owning_simple_array<sparrow::time_array, T>(
+        return detail::deserialize_simple_array<sparrow::time_array, T>(
             record_batch,
             body,
             name,

@@ -8,7 +8,7 @@
 
 namespace sparrow_ipc
 {
-    sparrow::null_array deserialize_non_owning_null(
+    sparrow::null_array deserialize_null_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
         std::string_view name,

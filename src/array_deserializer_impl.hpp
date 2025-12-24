@@ -23,7 +23,6 @@
 #include "sparrow_ipc/deserialize_variable_size_binary_array.hpp"
 #include "sparrow_ipc/metadata.hpp"
 
-// TODO rename all the deserialize_non_owning... fcts since this is not correct anymore
 namespace sparrow_ipc
 {
     namespace
@@ -135,7 +134,7 @@ namespace sparrow_ipc
             size_t& buffer_index,
             const org::apache::arrow::flatbuf::Field&)
         {
-            return sparrow::array(deserialize_non_owning_primitive_array<T>(
+            return sparrow::array(deserialize_primitive_array<T>(
                 record_batch, body, name, metadata, nullable, buffer_index
             ));
         }
@@ -150,7 +149,7 @@ namespace sparrow_ipc
             size_t& buffer_index,
             const org::apache::arrow::flatbuf::Field&)
         {
-            return sparrow::array(deserialize_non_owning_variable_size_binary<T>(
+            return sparrow::array(deserialize_variable_size_binary_array<T>(
                 record_batch, body, name, metadata, nullable, buffer_index
             ));
         }
@@ -222,7 +221,7 @@ namespace sparrow_ipc
             const org::apache::arrow::flatbuf::Field& field)
         {
             const auto* fixed_size_binary_field = field.type_as_FixedSizeBinary();
-            return sparrow::array(deserialize_non_owning_fixedwidthbinary(
+            return sparrow::array(deserialize_fixed_width_binary_array(
                 record_batch, body, name, metadata, nullable, buffer_index,
                 fixed_size_binary_field->byteWidth()
             ));
@@ -244,19 +243,19 @@ namespace sparrow_ipc
             switch (bit_width)
             {
                 case 32:
-                    return sparrow::array(deserialize_non_owning_decimal<sparrow::decimal<int32_t>>(
+                    return sparrow::array(deserialize_decimal_array<sparrow::decimal<int32_t>>(
                         record_batch, body, name, metadata, nullable, buffer_index, scale, precision
                     ));
                 case 64:
-                    return sparrow::array(deserialize_non_owning_decimal<sparrow::decimal<int64_t>>(
+                    return sparrow::array(deserialize_decimal_array<sparrow::decimal<int64_t>>(
                         record_batch, body, name, metadata, nullable, buffer_index, scale, precision
                     ));
                 case 128:
-                    return sparrow::array(deserialize_non_owning_decimal<sparrow::decimal<sparrow::int128_t>>(
+                    return sparrow::array(deserialize_decimal_array<sparrow::decimal<sparrow::int128_t>>(
                         record_batch, body, name, metadata, nullable, buffer_index, scale, precision
                     ));
                 case 256:
-                    return sparrow::array(deserialize_non_owning_decimal<sparrow::decimal<sparrow::int256_t>>(
+                    return sparrow::array(deserialize_decimal_array<sparrow::decimal<sparrow::int256_t>>(
                         record_batch, body, name, metadata, nullable, buffer_index, scale, precision
                     ));
                 default:
@@ -273,7 +272,7 @@ namespace sparrow_ipc
             size_t& buffer_index,
             const org::apache::arrow::flatbuf::Field&)
         {
-            return sparrow::array(deserialize_non_owning_null(
+            return sparrow::array(deserialize_null_array(
                 record_batch, body, name, metadata, nullable, buffer_index
             ));
         }
@@ -291,8 +290,8 @@ namespace sparrow_ipc
             const auto date_unit = date_type->unit();
             switch (date_unit)
             {
-                case org::apache::arrow::flatbuf::DateUnit::DAY: return sparrow::array(deserialize_non_owning_date_array<sparrow::date_days>(record_batch, body, name, metadata, nullable, buffer_index));
-                case org::apache::arrow::flatbuf::DateUnit::MILLISECOND: return sparrow::array(deserialize_non_owning_date_array<sparrow::date_milliseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::DateUnit::DAY: return sparrow::array(deserialize_date_array<sparrow::date_days>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::DateUnit::MILLISECOND: return sparrow::array(deserialize_date_array<sparrow::date_milliseconds>(record_batch, body, name, metadata, nullable, buffer_index));
                 default: throw std::runtime_error("Unsupported date unit: " + std::to_string(static_cast<int>(date_unit)));
             }
         }
@@ -310,9 +309,9 @@ namespace sparrow_ipc
             const org::apache::arrow::flatbuf::IntervalUnit interval_unit = interval_type->unit();
             switch (interval_unit)
             {
-                case org::apache::arrow::flatbuf::IntervalUnit::YEAR_MONTH: return sparrow::array(deserialize_non_owning_interval_array<sparrow::chrono::months>(record_batch, body, name, metadata, nullable, buffer_index));
-                case org::apache::arrow::flatbuf::IntervalUnit::DAY_TIME: return sparrow::array(deserialize_non_owning_interval_array<sparrow::days_time_interval>(record_batch, body, name, metadata, nullable, buffer_index));
-                case org::apache::arrow::flatbuf::IntervalUnit::MONTH_DAY_NANO: return sparrow::array(deserialize_non_owning_interval_array<sparrow::month_day_nanoseconds_interval>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::IntervalUnit::YEAR_MONTH: return sparrow::array(deserialize_interval_array<sparrow::chrono::months>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::IntervalUnit::DAY_TIME: return sparrow::array(deserialize_interval_array<sparrow::days_time_interval>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::IntervalUnit::MONTH_DAY_NANO: return sparrow::array(deserialize_interval_array<sparrow::month_day_nanoseconds_interval>(record_batch, body, name, metadata, nullable, buffer_index));
                 default: throw std::runtime_error("Unsupported interval unit: " + std::to_string(static_cast<int>(interval_unit)));
             }
         }
@@ -330,10 +329,10 @@ namespace sparrow_ipc
             const org::apache::arrow::flatbuf::TimeUnit time_unit = duration_type->unit();
             switch (time_unit)
             {
-                case org::apache::arrow::flatbuf::TimeUnit::SECOND: return sparrow::array(deserialize_non_owning_duration_array<std::chrono::seconds>(record_batch, body, name, metadata, nullable, buffer_index));
-                case org::apache::arrow::flatbuf::TimeUnit::MILLISECOND: return sparrow::array(deserialize_non_owning_duration_array<std::chrono::milliseconds>(record_batch, body, name, metadata, nullable, buffer_index));
-                case org::apache::arrow::flatbuf::TimeUnit::MICROSECOND: return sparrow::array(deserialize_non_owning_duration_array<std::chrono::microseconds>(record_batch, body, name, metadata, nullable, buffer_index));
-                case org::apache::arrow::flatbuf::TimeUnit::NANOSECOND: return sparrow::array(deserialize_non_owning_duration_array<std::chrono::nanoseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::TimeUnit::SECOND: return sparrow::array(deserialize_duration_array<std::chrono::seconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::TimeUnit::MILLISECOND: return sparrow::array(deserialize_duration_array<std::chrono::milliseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::TimeUnit::MICROSECOND: return sparrow::array(deserialize_duration_array<std::chrono::microseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::TimeUnit::NANOSECOND: return sparrow::array(deserialize_duration_array<std::chrono::nanoseconds>(record_batch, body, name, metadata, nullable, buffer_index));
                 default: throw std::runtime_error("Unsupported duration time unit: " + std::to_string(static_cast<int>(time_unit)));
             }
         }
@@ -351,10 +350,10 @@ namespace sparrow_ipc
             const auto time_unit = time_type->unit();
             switch (time_unit)
             {
-                case org::apache::arrow::flatbuf::TimeUnit::SECOND: return sparrow::array(deserialize_non_owning_time_array<sparrow::chrono::time_seconds>(record_batch, body, name, metadata, nullable, buffer_index));
-                case org::apache::arrow::flatbuf::TimeUnit::MILLISECOND: return sparrow::array(deserialize_non_owning_time_array<sparrow::chrono::time_milliseconds>(record_batch, body, name, metadata, nullable, buffer_index));
-                case org::apache::arrow::flatbuf::TimeUnit::MICROSECOND: return sparrow::array(deserialize_non_owning_time_array<sparrow::chrono::time_microseconds>(record_batch, body, name, metadata, nullable, buffer_index));
-                case org::apache::arrow::flatbuf::TimeUnit::NANOSECOND: return sparrow::array(deserialize_non_owning_time_array<sparrow::chrono::time_nanoseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::TimeUnit::SECOND: return sparrow::array(deserialize_time_array<sparrow::chrono::time_seconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::TimeUnit::MILLISECOND: return sparrow::array(deserialize_time_array<sparrow::chrono::time_milliseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::TimeUnit::MICROSECOND: return sparrow::array(deserialize_time_array<sparrow::chrono::time_microseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::TimeUnit::NANOSECOND: return sparrow::array(deserialize_time_array<sparrow::chrono::time_nanoseconds>(record_batch, body, name, metadata, nullable, buffer_index));
                 default: throw std::runtime_error("Unsupported time unit: " + std::to_string(static_cast<int>(time_unit)));
             }
         }
@@ -378,13 +377,13 @@ namespace sparrow_ipc
                 switch (time_unit)
                 {
                     case org::apache::arrow::flatbuf::TimeUnit::SECOND:
-                        return sparrow::array(deserialize_non_owning_timestamp_array<sparrow::timestamp_second>(record_batch, body, name, metadata, nullable, buffer_index, timezone));
+                        return sparrow::array(deserialize_timestamp_array<sparrow::timestamp_second>(record_batch, body, name, metadata, nullable, buffer_index, timezone));
                     case org::apache::arrow::flatbuf::TimeUnit::MILLISECOND:
-                        return sparrow::array(deserialize_non_owning_timestamp_array<sparrow::timestamp_millisecond>(record_batch, body, name, metadata, nullable, buffer_index, timezone));
+                        return sparrow::array(deserialize_timestamp_array<sparrow::timestamp_millisecond>(record_batch, body, name, metadata, nullable, buffer_index, timezone));
                     case org::apache::arrow::flatbuf::TimeUnit::MICROSECOND:
-                        return sparrow::array(deserialize_non_owning_timestamp_array<sparrow::timestamp_microsecond>(record_batch, body, name, metadata, nullable, buffer_index, timezone));
+                        return sparrow::array(deserialize_timestamp_array<sparrow::timestamp_microsecond>(record_batch, body, name, metadata, nullable, buffer_index, timezone));
                     case org::apache::arrow::flatbuf::TimeUnit::NANOSECOND:
-                        return sparrow::array(deserialize_non_owning_timestamp_array<sparrow::timestamp_nanosecond>(record_batch, body, name, metadata, nullable, buffer_index, timezone));
+                        return sparrow::array(deserialize_timestamp_array<sparrow::timestamp_nanosecond>(record_batch, body, name, metadata, nullable, buffer_index, timezone));
                     default:
                         throw std::runtime_error("Unsupported timestamp unit: " + std::to_string(static_cast<int>(time_unit)));
                 }
@@ -394,13 +393,13 @@ namespace sparrow_ipc
                 switch (time_unit)
                 {
                     case org::apache::arrow::flatbuf::TimeUnit::SECOND:
-                        return sparrow::array(deserialize_non_owning_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_seconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                        return sparrow::array(deserialize_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_seconds>(record_batch, body, name, metadata, nullable, buffer_index));
                     case org::apache::arrow::flatbuf::TimeUnit::MILLISECOND:
-                        return sparrow::array(deserialize_non_owning_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_milliseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                        return sparrow::array(deserialize_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_milliseconds>(record_batch, body, name, metadata, nullable, buffer_index));
                     case org::apache::arrow::flatbuf::TimeUnit::MICROSECOND:
-                        return sparrow::array(deserialize_non_owning_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_microseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                        return sparrow::array(deserialize_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_microseconds>(record_batch, body, name, metadata, nullable, buffer_index));
                     case org::apache::arrow::flatbuf::TimeUnit::NANOSECOND:
-                        return sparrow::array(deserialize_non_owning_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_nanoseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                        return sparrow::array(deserialize_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_nanoseconds>(record_batch, body, name, metadata, nullable, buffer_index));
                     default:
                         throw std::runtime_error("Unsupported timestamp unit: " + std::to_string(static_cast<int>(time_unit)));
                 }

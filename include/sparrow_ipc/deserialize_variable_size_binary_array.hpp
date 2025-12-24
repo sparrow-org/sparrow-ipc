@@ -14,7 +14,7 @@
 namespace sparrow_ipc
 {
     template <typename T>
-    [[nodiscard]] T deserialize_non_owning_variable_size_binary(
+    [[nodiscard]] T deserialize_variable_size_binary_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
         std::string_view name,

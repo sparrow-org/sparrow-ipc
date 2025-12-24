@@ -12,7 +12,7 @@
 namespace sparrow_ipc
 {
     template <typename T>
-    [[nodiscard]] sparrow::primitive_array<T> deserialize_non_owning_primitive_array(
+    [[nodiscard]] sparrow::primitive_array<T> deserialize_primitive_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
         std::string_view name,
@@ -21,7 +21,7 @@ namespace sparrow_ipc
         size_t& buffer_index
     )
     {
-        return detail::deserialize_non_owning_simple_array<sparrow::primitive_array, T>(
+        return detail::deserialize_simple_array<sparrow::primitive_array, T>(
             record_batch,
             body,
             name,

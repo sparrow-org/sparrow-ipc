@@ -35,7 +35,7 @@ namespace sparrow_ipc::detail
      * @return The deserialized array of type ArrayType<T>
      */
     template <template<typename...> class ArrayType, typename T>
-    [[nodiscard]] ArrayType<T> deserialize_non_owning_simple_array(
+    [[nodiscard]] ArrayType<T> deserialize_simple_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
         std::string_view name,

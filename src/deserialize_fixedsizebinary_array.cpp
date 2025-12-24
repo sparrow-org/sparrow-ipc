@@ -4,7 +4,7 @@
 
 namespace sparrow_ipc
 {
-    sparrow::fixed_width_binary_array deserialize_non_owning_fixedwidthbinary(
+    sparrow::fixed_width_binary_array deserialize_fixed_width_binary_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
         std::string_view name,

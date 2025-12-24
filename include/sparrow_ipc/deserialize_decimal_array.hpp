@@ -14,7 +14,7 @@
 namespace sparrow_ipc
 {
     template <sparrow::decimal_type T>
-    [[nodiscard]] sparrow::decimal_array<T> deserialize_non_owning_decimal(
+    [[nodiscard]] sparrow::decimal_array<T> deserialize_decimal_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
         std::string_view name,
