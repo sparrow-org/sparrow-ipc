@@ -1,0 +1,411 @@
+#pragma once
+
+#include <functional>
+#include <optional>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include <sparrow/array.hpp>
+#include <sparrow/types/data_type.hpp>
+
+#include "Message_generated.h"
+
+#include "sparrow_ipc/deserialize_decimal_array.hpp"
+#include "sparrow_ipc/deserialize_duration_array.hpp"
+#include "sparrow_ipc/deserialize_fixedsizebinary_array.hpp"
+#include "sparrow_ipc/deserialize_interval_array.hpp"
+#include "sparrow_ipc/deserialize_null_array.hpp"
+#include "sparrow_ipc/deserialize_primitive_array.hpp"
+#include "sparrow_ipc/deserialize_time_related_arrays.hpp"
+#include "sparrow_ipc/deserialize_variable_size_binary_array.hpp"
+#include "sparrow_ipc/metadata.hpp"
+
+// TODO rename all the deserialize_non_owning... fcts since this is not correct anymore
+namespace sparrow_ipc
+{
+    namespace
+    {
+        // Integer bit width constants
+        constexpr int32_t BIT_WIDTH_8 = 8;
+        constexpr int32_t BIT_WIDTH_16 = 16;
+        constexpr int32_t BIT_WIDTH_32 = 32;
+        constexpr int32_t BIT_WIDTH_64 = 64;
+    }
+
+    /**
+     * @brief A class for deserializing Arrow arrays from Flatbuffers messages.
+     *
+     * This class uses a map to deserialize different types of Arrow
+     * arrays based on the field type specified in the schema. It is designed to be
+     * extensible, allowing new deserializers to be added by registering them in the map.
+     */
+    class ArrayDeserializer
+    {
+    public:
+        /**
+         * @brief A function pointer type for the deserializer function.
+         *
+         * This defines the signature for all functions that can deserialize a specific
+         * Arrow array type.
+         */
+        using DeserializerFunc = std::function<sparrow::array(
+            const org::apache::arrow::flatbuf::RecordBatch&,
+            const std::span<const uint8_t>&,
+            const std::string&,
+            const std::optional<std::vector<sparrow::metadata_pair>>&,
+            bool,
+            size_t&,
+            const org::apache::arrow::flatbuf::Field&
+        )>;
+
+        /**
+         * @brief Constructs the ArrayDeserializer and initializes the deserializer map.
+         *
+         * The constructor populates the map with function pointers to the static
+         * deserialization methods for each supported Arrow data type.
+         */
+        ArrayDeserializer()
+        {
+            m_deserializer_map[org::apache::arrow::flatbuf::Type::Bool] = &deserialize_primitive<bool>;
+            m_deserializer_map[org::apache::arrow::flatbuf::Type::Int] = &deserialize_int;
+            m_deserializer_map[org::apache::arrow::flatbuf::Type::FloatingPoint] = &deserialize_float;
+            m_deserializer_map[org::apache::arrow::flatbuf::Type::FixedSizeBinary] = &deserialize_fixed_size_binary;
+            m_deserializer_map[org::apache::arrow::flatbuf::Type::Binary] = &deserialize_variable_size_binary<sparrow::binary_array>;
+            m_deserializer_map[org::apache::arrow::flatbuf::Type::LargeBinary] = &deserialize_variable_size_binary<sparrow::big_binary_array>;
+            m_deserializer_map[org::apache::arrow::flatbuf::Type::Utf8] = &deserialize_variable_size_binary<sparrow::string_array>;
+            m_deserializer_map[org::apache::arrow::flatbuf::Type::LargeUtf8] = &deserialize_variable_size_binary<sparrow::big_string_array>;
+            m_deserializer_map[org::apache::arrow::flatbuf::Type::Interval] = &deserialize_interval;
+            m_deserializer_map[org::apache::arrow::flatbuf::Type::Duration] = &deserialize_duration;
+            m_deserializer_map[org::apache::arrow::flatbuf::Type::Timestamp] = &deserialize_timestamp;
+            m_deserializer_map[org::apache::arrow::flatbuf::Type::Date] = &deserialize_date;
+            m_deserializer_map[org::apache::arrow::flatbuf::Type::Time] = &deserialize_time;
+            m_deserializer_map[org::apache::arrow::flatbuf::Type::Null] = &deserialize_null;
+            m_deserializer_map[org::apache::arrow::flatbuf::Type::Decimal] = &deserialize_decimal;
+        }
+
+        /**
+         * @brief Deserializes an array based on its field description.
+         *
+         * This is the main entry point of the deserializer. It looks up the appropriate
+         * deserialization function from the map based on the field's type and invokes it.
+         *
+         * @param record_batch The Flatbuffer RecordBatch containing the data.
+         * @param body The raw byte buffer of the message body.
+         * @param name The name of the field.
+         * @param metadata The metadata associated with the field.
+         * @param nullable Whether the field is nullable.
+         * @param buffer_index The current index into the buffer list of the RecordBatch.
+         * @param field The Flatbuffer Field object describing the array to deserialize.
+         * @return A `sparrow::array` containing the deserialized data.
+         * @throws std::runtime_error if the field type is not supported.
+         */
+        sparrow::array deserialize(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            const org::apache::arrow::flatbuf::Field& field) const
+        {
+            auto it = m_deserializer_map.find(field.type_type());
+            if (it == m_deserializer_map.end())
+            {
+                throw std::runtime_error(
+                    "Unsupported field type: " + std::to_string(static_cast<int>(field.type_type()))
+                    + " for field '" + name + "'"
+                );
+            }
+            return it->second(record_batch, body, name, metadata, nullable, buffer_index, field);
+        }
+
+    private:
+        std::unordered_map<org::apache::arrow::flatbuf::Type, DeserializerFunc> m_deserializer_map;
+
+        template<typename T>
+        static sparrow::array deserialize_primitive(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            const org::apache::arrow::flatbuf::Field&)
+        {
+            return sparrow::array(deserialize_non_owning_primitive_array<T>(
+                record_batch, body, name, metadata, nullable, buffer_index
+            ));
+        }
+
+        template<typename T>
+        static sparrow::array deserialize_variable_size_binary(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            const org::apache::arrow::flatbuf::Field&)
+        {
+            return sparrow::array(deserialize_non_owning_variable_size_binary<T>(
+                record_batch, body, name, metadata, nullable, buffer_index
+            ));
+        }
+
+        static sparrow::array deserialize_int(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            const org::apache::arrow::flatbuf::Field& field)
+        {
+            const auto* int_type = field.type_as_Int();
+            const auto bit_width = int_type->bitWidth();
+            const bool is_signed = int_type->is_signed();
+
+            if (is_signed)
+            {
+                switch (bit_width)
+                {
+                    case BIT_WIDTH_8:  return deserialize_primitive<int8_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
+                    case BIT_WIDTH_16: return deserialize_primitive<int16_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
+                    case BIT_WIDTH_32: return deserialize_primitive<int32_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
+                    case BIT_WIDTH_64: return deserialize_primitive<int64_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
+                    default: throw std::runtime_error("Unsupported integer bit width: " + std::to_string(bit_width));
+                }
+            }
+            else
+            {
+                switch (bit_width)
+                {
+                    case BIT_WIDTH_8: return deserialize_primitive<uint8_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
+                    case BIT_WIDTH_16: return deserialize_primitive<uint16_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
+                    case BIT_WIDTH_32: return deserialize_primitive<uint32_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
+                    case BIT_WIDTH_64: return deserialize_primitive<uint64_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
+                    default: throw std::runtime_error("Unsupported integer bit width: " + std::to_string(bit_width));
+                }
+            }
+        }
+
+        static sparrow::array deserialize_float(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            const org::apache::arrow::flatbuf::Field& field)
+        {
+            const auto* float_type = field.type_as_FloatingPoint();
+            const auto precision = float_type->precision();
+            switch (precision)
+            {
+                case org::apache::arrow::flatbuf::Precision::HALF: return deserialize_primitive<sparrow::float16_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
+                case org::apache::arrow::flatbuf::Precision::SINGLE: return deserialize_primitive<float>(record_batch, body, name, metadata, nullable, buffer_index, field);
+                case org::apache::arrow::flatbuf::Precision::DOUBLE: return deserialize_primitive<double>(record_batch, body, name, metadata, nullable, buffer_index, field);
+                default: throw std::runtime_error("Unsupported floating point precision: " + std::to_string(static_cast<int>(precision)));
+            }
+        }
+
+        static sparrow::array deserialize_fixed_size_binary(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            const org::apache::arrow::flatbuf::Field& field)
+        {
+            const auto* fixed_size_binary_field = field.type_as_FixedSizeBinary();
+            return sparrow::array(deserialize_non_owning_fixedwidthbinary(
+                record_batch, body, name, metadata, nullable, buffer_index,
+                fixed_size_binary_field->byteWidth()
+            ));
+        }
+
+        static sparrow::array deserialize_decimal(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            const org::apache::arrow::flatbuf::Field& field)
+        {
+            const auto* decimal_field = field.type_as_Decimal();
+            const auto scale = decimal_field->scale();
+            const auto precision = decimal_field->precision();
+            const auto bit_width = decimal_field->bitWidth();
+            switch (bit_width)
+            {
+                case 32:
+                    return sparrow::array(deserialize_non_owning_decimal<sparrow::decimal<int32_t>>(
+                        record_batch, body, name, metadata, nullable, buffer_index, scale, precision
+                    ));
+                case 64:
+                    return sparrow::array(deserialize_non_owning_decimal<sparrow::decimal<int64_t>>(
+                        record_batch, body, name, metadata, nullable, buffer_index, scale, precision
+                    ));
+                case 128:
+                    return sparrow::array(deserialize_non_owning_decimal<sparrow::decimal<sparrow::int128_t>>(
+                        record_batch, body, name, metadata, nullable, buffer_index, scale, precision
+                    ));
+                case 256:
+                    return sparrow::array(deserialize_non_owning_decimal<sparrow::decimal<sparrow::int256_t>>(
+                        record_batch, body, name, metadata, nullable, buffer_index, scale, precision
+                    ));
+                default:
+                    throw std::runtime_error("Unsupported decimal bit width: " + std::to_string(bit_width));
+            }
+        }
+
+        static sparrow::array deserialize_null(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            const org::apache::arrow::flatbuf::Field&)
+        {
+            return sparrow::array(deserialize_non_owning_null(
+                record_batch, body, name, metadata, nullable, buffer_index
+            ));
+        }
+
+        static sparrow::array deserialize_date(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            const org::apache::arrow::flatbuf::Field& field)
+        {
+            const auto date_type = field.type_as_Date();
+            const auto date_unit = date_type->unit();
+            switch (date_unit)
+            {
+                case org::apache::arrow::flatbuf::DateUnit::DAY: return sparrow::array(deserialize_non_owning_date_array<sparrow::date_days>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::DateUnit::MILLISECOND: return sparrow::array(deserialize_non_owning_date_array<sparrow::date_milliseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                default: throw std::runtime_error("Unsupported date unit: " + std::to_string(static_cast<int>(date_unit)));
+            }
+        }
+
+        static sparrow::array deserialize_interval(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            const org::apache::arrow::flatbuf::Field& field)
+        {
+            const auto* interval_type = field.type_as_Interval();
+            const org::apache::arrow::flatbuf::IntervalUnit interval_unit = interval_type->unit();
+            switch (interval_unit)
+            {
+                case org::apache::arrow::flatbuf::IntervalUnit::YEAR_MONTH: return sparrow::array(deserialize_non_owning_interval_array<sparrow::chrono::months>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::IntervalUnit::DAY_TIME: return sparrow::array(deserialize_non_owning_interval_array<sparrow::days_time_interval>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::IntervalUnit::MONTH_DAY_NANO: return sparrow::array(deserialize_non_owning_interval_array<sparrow::month_day_nanoseconds_interval>(record_batch, body, name, metadata, nullable, buffer_index));
+                default: throw std::runtime_error("Unsupported interval unit: " + std::to_string(static_cast<int>(interval_unit)));
+            }
+        }
+
+        static sparrow::array deserialize_duration(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            const org::apache::arrow::flatbuf::Field& field)
+        {
+            const auto* duration_type = field.type_as_Duration();
+            const org::apache::arrow::flatbuf::TimeUnit time_unit = duration_type->unit();
+            switch (time_unit)
+            {
+                case org::apache::arrow::flatbuf::TimeUnit::SECOND: return sparrow::array(deserialize_non_owning_duration_array<std::chrono::seconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::TimeUnit::MILLISECOND: return sparrow::array(deserialize_non_owning_duration_array<std::chrono::milliseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::TimeUnit::MICROSECOND: return sparrow::array(deserialize_non_owning_duration_array<std::chrono::microseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::TimeUnit::NANOSECOND: return sparrow::array(deserialize_non_owning_duration_array<std::chrono::nanoseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                default: throw std::runtime_error("Unsupported duration time unit: " + std::to_string(static_cast<int>(time_unit)));
+            }
+        }
+
+        static sparrow::array deserialize_time(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            const org::apache::arrow::flatbuf::Field& field)
+        {
+            const auto time_type = field.type_as_Time();
+            const auto time_unit = time_type->unit();
+            switch (time_unit)
+            {
+                case org::apache::arrow::flatbuf::TimeUnit::SECOND: return sparrow::array(deserialize_non_owning_time_array<sparrow::chrono::time_seconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::TimeUnit::MILLISECOND: return sparrow::array(deserialize_non_owning_time_array<sparrow::chrono::time_milliseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::TimeUnit::MICROSECOND: return sparrow::array(deserialize_non_owning_time_array<sparrow::chrono::time_microseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                case org::apache::arrow::flatbuf::TimeUnit::NANOSECOND: return sparrow::array(deserialize_non_owning_time_array<sparrow::chrono::time_nanoseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                default: throw std::runtime_error("Unsupported time unit: " + std::to_string(static_cast<int>(time_unit)));
+            }
+        }
+
+        static sparrow::array deserialize_timestamp(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            const org::apache::arrow::flatbuf::Field& field)
+        {
+            const auto timestamp_type = field.type_as_Timestamp();
+            const auto time_unit = timestamp_type->unit();
+            const bool has_timezone = timestamp_type->timezone() != nullptr;
+
+            if (has_timezone)
+            {
+                const std::string timezone = timestamp_type->timezone()->str();
+                switch (time_unit)
+                {
+                    case org::apache::arrow::flatbuf::TimeUnit::SECOND:
+                        return sparrow::array(deserialize_non_owning_timestamp_array<sparrow::timestamp_second>(record_batch, body, name, metadata, nullable, buffer_index, timezone));
+                    case org::apache::arrow::flatbuf::TimeUnit::MILLISECOND:
+                        return sparrow::array(deserialize_non_owning_timestamp_array<sparrow::timestamp_millisecond>(record_batch, body, name, metadata, nullable, buffer_index, timezone));
+                    case org::apache::arrow::flatbuf::TimeUnit::MICROSECOND:
+                        return sparrow::array(deserialize_non_owning_timestamp_array<sparrow::timestamp_microsecond>(record_batch, body, name, metadata, nullable, buffer_index, timezone));
+                    case org::apache::arrow::flatbuf::TimeUnit::NANOSECOND:
+                        return sparrow::array(deserialize_non_owning_timestamp_array<sparrow::timestamp_nanosecond>(record_batch, body, name, metadata, nullable, buffer_index, timezone));
+                    default:
+                        throw std::runtime_error("Unsupported timestamp unit: " + std::to_string(static_cast<int>(time_unit)));
+                }
+            }
+            else
+            {
+                switch (time_unit)
+                {
+                    case org::apache::arrow::flatbuf::TimeUnit::SECOND:
+                        return sparrow::array(deserialize_non_owning_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_seconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                    case org::apache::arrow::flatbuf::TimeUnit::MILLISECOND:
+                        return sparrow::array(deserialize_non_owning_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_milliseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                    case org::apache::arrow::flatbuf::TimeUnit::MICROSECOND:
+                        return sparrow::array(deserialize_non_owning_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_microseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                    case org::apache::arrow::flatbuf::TimeUnit::NANOSECOND:
+                        return sparrow::array(deserialize_non_owning_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_nanoseconds>(record_batch, body, name, metadata, nullable, buffer_index));
+                    default:
+                        throw std::runtime_error("Unsupported timestamp unit: " + std::to_string(static_cast<int>(time_unit)));
+                }
+            }
+        }
+    };
+}
+

@@ -149,6 +149,7 @@ set(SPARROW_IPC_HEADERS
 
 set(SPARROW_IPC_SRC
     ${SPARROW_IPC_SOURCE_DIR}/any_output_stream.cpp
+    ${SPARROW_IPC_SOURCE_DIR}/array_deserializer_impl.hpp
     ${SPARROW_IPC_SOURCE_DIR}/arrow_interface/arrow_array.cpp
     ${SPARROW_IPC_SOURCE_DIR}/arrow_interface/arrow_array/private_data.cpp
     ${SPARROW_IPC_SOURCE_DIR}/arrow_interface/arrow_schema.cpp
