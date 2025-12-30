@@ -34,6 +34,7 @@ const std::vector<std::filesystem::path> files_paths_to_test = {
     tests_resources_files_path / "generated_large_binary",
     tests_resources_files_path / "generated_binary_zerolength",
     tests_resources_files_path / "generated_binary_no_batches",
+    tests_resources_files_path / "generated_binary_view",
     tests_resources_files_path / "generated_interval",
     tests_resources_files_path / "generated_duration",
     tests_resources_files_path / "generated_datetime",

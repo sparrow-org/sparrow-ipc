@@ -41,7 +41,9 @@ namespace sparrow_ipc
         const std::vector<std::optional<std::vector<sparrow::metadata_pair>>>& field_metadata
     )
     {
-        static const array_deserializer arr_deserializer;
+	static const array_deserializer arr_deserializer;
+        const auto* variadic_counts = record_batch.variadicBufferCounts();
+        size_t variadic_counts_idx = 0;
 
         const size_t num_fields = schema.fields() == nullptr ? 0 : static_cast<size_t>(schema.fields()->size());
         std::vector<sparrow::array> arrays;

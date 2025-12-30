@@ -680,11 +680,43 @@ namespace sparrow_ipc
         );
     }
 
-    flatbuffers::FlatBufferBuilder get_record_batch_message_builder(
-        const sparrow::record_batch& record_batch,
-        std::optional<CompressionType> compression,
-        std::optional<std::reference_wrapper<CompressionCache>> cache
-    )
+    namespace
+    {
+        std::vector<int64_t> get_variadic_buffer_counts(const sparrow::record_batch& record_batch)
+        {
+            std::vector<int64_t> counts;
+            for (const auto& column : record_batch.columns())
+            {
+                const auto& proxy = sparrow::detail::array_access::get_arrow_proxy(column);
+                const auto format_str = proxy.schema().format;
+                const auto type = sparrow::format_to_data_type(format_str);
+
+                if (type == sparrow::data_type::BINARY_VIEW || type == sparrow::data_type::STRING_VIEW)
+                {
+                    // n_buffers includes the following buffers: validity buffer, views buffer, data buffers (variadic buffers if present for strings > 12 bytes) and buffer for variadic buffer sizes
+                    int64_t n_buffers = proxy.n_buffers();
+                    // The variable size binary view array should at least contain validity, views and variadic buffers size
+                    if (n_buffers <= 2)
+                    {
+                        throw std::runtime_error(
+                            "Variable size binary view array contains " + std::to_string(n_buffers) + " buffers!"
+                        );
+                    }
+
+                    const auto& sizes_buffer = proxy.buffers().back();
+                    const int64_t num_variadic_data_buffers = sizes_buffer.size() / sizeof(int64_t);
+
+                    // TODO should be only num_variadic_data_buffers
+                    counts.push_back(num_variadic_data_buffers + 1);
+                }
+            }
+            return counts;
+        }
+    }
+
+    flatbuffers::FlatBufferBuilder get_record_batch_message_builder(const sparrow::record_batch& record_batch,
+                                                                    std::optional<CompressionType> compression,
+                                                                    std::optional<std::reference_wrapper<CompressionCache>> cache)
     {
         flatbuffers::FlatBufferBuilder record_batch_builder;
         flatbuffers::Offset<org::apache::arrow::flatbuf::BodyCompression> compression_offset = 0;
@@ -704,15 +736,17 @@ namespace sparrow_ipc
         }
         const auto& buffers = compressed_buffers ? *compressed_buffers : get_buffers(record_batch);
         const std::vector<org::apache::arrow::flatbuf::FieldNode> nodes = create_fieldnodes(record_batch);
+        const auto variadic_counts = get_variadic_buffer_counts(record_batch);
         auto nodes_offset = record_batch_builder.CreateVectorOfStructs(nodes);
         auto buffers_offset = record_batch_builder.CreateVectorOfStructs(buffers);
+        auto variadic_counts_offset = record_batch_builder.CreateVector(variadic_counts);
         const auto record_batch_offset = org::apache::arrow::flatbuf::CreateRecordBatch(
             record_batch_builder,
             static_cast<int64_t>(record_batch.nb_rows()),
             nodes_offset,
             buffers_offset,
             compression_offset,
-            0  // TODO :variadic buffer Counts
+            variadic_counts_offset
         );
 
         const int64_t body_size = calculate_body_size(record_batch, compression, cache);

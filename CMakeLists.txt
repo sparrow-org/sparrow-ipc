@@ -133,6 +133,7 @@ set(SPARROW_IPC_HEADERS
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_time_related_arrays.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_utils.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_variable_size_binary_array.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_variable_size_binary_view_array.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserializer.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/encapsulated_message.hpp
