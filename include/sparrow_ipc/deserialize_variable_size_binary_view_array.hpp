@@ -14,14 +14,14 @@
 namespace sparrow_ipc
 {
     template <typename T>
-    [[nodiscard]] T deserialize_non_owning_variable_size_binary_view(
+    [[nodiscard]] T deserialize_variable_size_binary_view_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
         std::string_view name,
         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
         bool nullable,
         size_t& buffer_index,
-        int64_t data_buffers_size
+        const int64_t data_buffers_size
     )
     {
         // TODO Use the commented line below instead of the following snippet when this is handled/added in sparrow

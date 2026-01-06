@@ -39,6 +39,8 @@ namespace sparrow_ipc
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Time] = &deserialize_time;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Null] = &deserialize_null;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Decimal] = &deserialize_decimal;
+        m_deserializer_map[org::apache::arrow::flatbuf::Type::BinaryView] = &deserialize_variable_size_binary_view<sparrow::binary_view_array>;
+        m_deserializer_map[org::apache::arrow::flatbuf::Type::Utf8View] = &deserialize_variable_size_binary_view<sparrow::string_view_array>;
     }
 
     sparrow::array array_deserializer::deserialize(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -47,6 +49,7 @@ namespace sparrow_ipc
                                                   const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                   bool nullable,
                                                   size_t& buffer_index,
+                                                  size_t& variadic_counts_idx,
                                                   const org::apache::arrow::flatbuf::Field& field) const
     {
         auto it = m_deserializer_map.find(field.type_type());
@@ -57,7 +60,7 @@ namespace sparrow_ipc
                 + " for field '" + name + "'"
             );
         }
-        return it->second(record_batch, body, name, metadata, nullable, buffer_index, field);
+        return it->second(record_batch, body, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
     }
 
     sparrow::array array_deserializer::deserialize_int(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -66,6 +69,7 @@ namespace sparrow_ipc
                                                       const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                       bool nullable,
                                                       size_t& buffer_index,
+                                                      size_t& variadic_counts_idx,
                                                       const org::apache::arrow::flatbuf::Field& field)
     {
         const auto* int_type = field.type_as_Int();
@@ -76,10 +80,10 @@ namespace sparrow_ipc
         {
             switch (bit_width)
             {
-                case BIT_WIDTH_8:  return deserialize_primitive<int8_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
-                case BIT_WIDTH_16: return deserialize_primitive<int16_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
-                case BIT_WIDTH_32: return deserialize_primitive<int32_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
-                case BIT_WIDTH_64: return deserialize_primitive<int64_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
+                case BIT_WIDTH_8:  return deserialize_primitive<int8_t>(record_batch, body, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
+                case BIT_WIDTH_16: return deserialize_primitive<int16_t>(record_batch, body, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
+                case BIT_WIDTH_32: return deserialize_primitive<int32_t>(record_batch, body, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
+                case BIT_WIDTH_64: return deserialize_primitive<int64_t>(record_batch, body, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
                 default: throw std::runtime_error("Unsupported integer bit width: " + std::to_string(bit_width));
             }
         }
@@ -87,10 +91,10 @@ namespace sparrow_ipc
         {
             switch (bit_width)
             {
-                case BIT_WIDTH_8: return deserialize_primitive<uint8_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
-                case BIT_WIDTH_16: return deserialize_primitive<uint16_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
-                case BIT_WIDTH_32: return deserialize_primitive<uint32_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
-                case BIT_WIDTH_64: return deserialize_primitive<uint64_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
+                case BIT_WIDTH_8: return deserialize_primitive<uint8_t>(record_batch, body, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
+                case BIT_WIDTH_16: return deserialize_primitive<uint16_t>(record_batch, body, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
+                case BIT_WIDTH_32: return deserialize_primitive<uint32_t>(record_batch, body, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
+                case BIT_WIDTH_64: return deserialize_primitive<uint64_t>(record_batch, body, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
                 default: throw std::runtime_error("Unsupported integer bit width: " + std::to_string(bit_width));
             }
         }
@@ -102,15 +106,16 @@ namespace sparrow_ipc
                                                         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                         bool nullable,
                                                         size_t& buffer_index,
+                                                        size_t& variadic_counts_idx,
                                                         const org::apache::arrow::flatbuf::Field& field)
     {
         const auto* float_type = field.type_as_FloatingPoint();
         const auto precision = float_type->precision();
         switch (precision)
         {
-            case org::apache::arrow::flatbuf::Precision::HALF: return deserialize_primitive<sparrow::float16_t>(record_batch, body, name, metadata, nullable, buffer_index, field);
-            case org::apache::arrow::flatbuf::Precision::SINGLE: return deserialize_primitive<float>(record_batch, body, name, metadata, nullable, buffer_index, field);
-            case org::apache::arrow::flatbuf::Precision::DOUBLE: return deserialize_primitive<double>(record_batch, body, name, metadata, nullable, buffer_index, field);
+            case org::apache::arrow::flatbuf::Precision::HALF: return deserialize_primitive<sparrow::float16_t>(record_batch, body, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
+            case org::apache::arrow::flatbuf::Precision::SINGLE: return deserialize_primitive<float>(record_batch, body, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
+            case org::apache::arrow::flatbuf::Precision::DOUBLE: return deserialize_primitive<double>(record_batch, body, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
             default: throw std::runtime_error("Unsupported floating point precision: " + std::to_string(static_cast<int>(precision)));
         }
     }
@@ -121,6 +126,7 @@ namespace sparrow_ipc
                                                  const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                  bool nullable,
                                                  size_t& buffer_index,
+                                                 size_t&,
                                                  const org::apache::arrow::flatbuf::Field& field)
     {
         const auto* fixed_size_binary_field = field.type_as_FixedSizeBinary();
@@ -136,6 +142,7 @@ namespace sparrow_ipc
                                                           const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                           bool nullable,
                                                           size_t& buffer_index,
+                                                          size_t&,
                                                           const org::apache::arrow::flatbuf::Field& field)
     {
         const auto* decimal_field = field.type_as_Decimal();
@@ -171,6 +178,7 @@ namespace sparrow_ipc
                                                        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                        bool nullable,
                                                        size_t& buffer_index,
+                                                       size_t&,
                                                        const org::apache::arrow::flatbuf::Field&)
     {
         return sparrow::array(deserialize_null_array(
@@ -184,6 +192,7 @@ namespace sparrow_ipc
                                                        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                        bool nullable,
                                                        size_t& buffer_index,
+                                                       size_t&,
                                                        const org::apache::arrow::flatbuf::Field& field)
     {
         const auto date_type = field.type_as_Date();
@@ -202,6 +211,7 @@ namespace sparrow_ipc
                                                            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                            bool nullable,
                                                            size_t& buffer_index,
+                                                           size_t&,
                                                            const org::apache::arrow::flatbuf::Field& field)
     {
         const auto* interval_type = field.type_as_Interval();
@@ -221,6 +231,7 @@ namespace sparrow_ipc
                                                            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                            bool nullable,
                                                            size_t& buffer_index,
+                                                           size_t&,
                                                            const org::apache::arrow::flatbuf::Field& field)
     {
         const auto* duration_type = field.type_as_Duration();
@@ -241,6 +252,7 @@ namespace sparrow_ipc
                                                        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                        bool nullable,
                                                        size_t& buffer_index,
+                                                       size_t&,
                                                        const org::apache::arrow::flatbuf::Field& field)
     {
         const auto time_type = field.type_as_Time();
@@ -261,6 +273,7 @@ namespace sparrow_ipc
                                                             const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                             bool nullable,
                                                             size_t& buffer_index,
+                                                            size_t&,
                                                             const org::apache::arrow::flatbuf::Field& field)
     {
         const auto timestamp_type = field.type_as_Timestamp();
