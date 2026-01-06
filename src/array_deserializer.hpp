@@ -24,7 +24,7 @@ namespace sparrow_ipc
      * arrays based on the field type specified in the schema. It is designed to be
      * extensible, allowing new deserializers to be added by registering them in the map.
      */
-    class ArrayDeserializer
+    class array_deserializer
     {
     public:
         /**
@@ -33,7 +33,7 @@ namespace sparrow_ipc
          * This defines the signature for all functions that can deserialize a specific
          * Arrow array type.
          */
-        using DeserializerFunc = std::function<sparrow::array(
+        using deserializer_func = std::function<sparrow::array(
             const org::apache::arrow::flatbuf::RecordBatch&,
             const std::span<const uint8_t>&,
             const std::string&,
@@ -44,12 +44,12 @@ namespace sparrow_ipc
         )>;
 
         /**
-         * @brief Constructs the ArrayDeserializer and initializes the deserializer map.
+         * @brief Constructs the array_deserializer and initializes the deserializer map.
          *
          * The constructor populates the map with function pointers to the static
          * deserialization methods for each supported Arrow data type.
          */
-        ArrayDeserializer();
+        array_deserializer();
 
         /**
          * @brief Deserializes an array based on its field description.
@@ -75,7 +75,7 @@ namespace sparrow_ipc
                                    size_t& buffer_index,
                                    const org::apache::arrow::flatbuf::Field& field) const;
     private:
-        std::unordered_map<org::apache::arrow::flatbuf::Type, DeserializerFunc> m_deserializer_map;
+        std::unordered_map<org::apache::arrow::flatbuf::Type, deserializer_func> m_deserializer_map;
 
         template<typename T>
         static sparrow::array deserialize_primitive(const org::apache::arrow::flatbuf::RecordBatch& record_batch,

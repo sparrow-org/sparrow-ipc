@@ -1,6 +1,6 @@
 #include "sparrow_ipc/deserialize.hpp"
 
-#include "array_deserializer_impl.hpp"
+#include "array_deserializer.hpp"
 #include "sparrow_ipc/encapsulated_message.hpp"
 #include "sparrow_ipc/magic_values.hpp"
 #include "sparrow_ipc/metadata.hpp"
@@ -41,7 +41,7 @@ namespace sparrow_ipc
         const std::vector<std::optional<std::vector<sparrow::metadata_pair>>>& field_metadata
     )
     {
-        static const ArrayDeserializer arr_deserializer;
+        static const array_deserializer arr_deserializer;
 
         const size_t num_fields = schema.fields() == nullptr ? 0 : static_cast<size_t>(schema.fields()->size());
         std::vector<sparrow::array> arrays;

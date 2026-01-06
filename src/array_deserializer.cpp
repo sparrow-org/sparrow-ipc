@@ -1,4 +1,4 @@
-#include "array_deserializer_impl.hpp"
+#include "array_deserializer.hpp"
 
 #include <stdexcept>
 
@@ -22,7 +22,7 @@ namespace sparrow_ipc
         constexpr int32_t BIT_WIDTH_64 = 64;
     }
 
-    ArrayDeserializer::ArrayDeserializer()
+    array_deserializer::array_deserializer()
     {
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Bool] = &deserialize_primitive<bool>;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Int] = &deserialize_int;
@@ -41,7 +41,7 @@ namespace sparrow_ipc
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Decimal] = &deserialize_decimal;
     }
 
-    sparrow::array ArrayDeserializer::deserialize(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+    sparrow::array array_deserializer::deserialize(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                   const std::span<const uint8_t>& body,
                                                   const std::string& name,
                                                   const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
@@ -60,7 +60,7 @@ namespace sparrow_ipc
         return it->second(record_batch, body, name, metadata, nullable, buffer_index, field);
     }
 
-    sparrow::array ArrayDeserializer::deserialize_int(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+    sparrow::array array_deserializer::deserialize_int(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                       const std::span<const uint8_t>& body,
                                                       const std::string& name,
                                                       const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
@@ -96,7 +96,7 @@ namespace sparrow_ipc
         }
     }
 
-    sparrow::array ArrayDeserializer::deserialize_float(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+    sparrow::array array_deserializer::deserialize_float(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                         const std::span<const uint8_t>& body,
                                                         const std::string& name,
                                                         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
@@ -115,7 +115,7 @@ namespace sparrow_ipc
         }
     }
 
-    sparrow::array ArrayDeserializer::deserialize_fixed_size_binary(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+    sparrow::array array_deserializer::deserialize_fixed_size_binary(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                  const std::span<const uint8_t>& body,
                                                  const std::string& name,
                                                  const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
@@ -130,7 +130,7 @@ namespace sparrow_ipc
         ));
     }
 
-    sparrow::array ArrayDeserializer::deserialize_decimal(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+    sparrow::array array_deserializer::deserialize_decimal(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                           const std::span<const uint8_t>& body,
                                                           const std::string& name,
                                                           const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
@@ -165,7 +165,7 @@ namespace sparrow_ipc
         }
     }
 
-    sparrow::array ArrayDeserializer::deserialize_null(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+    sparrow::array array_deserializer::deserialize_null(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                        const std::span<const uint8_t>& body,
                                                        const std::string& name,
                                                        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
@@ -178,7 +178,7 @@ namespace sparrow_ipc
         ));
     }
 
-    sparrow::array ArrayDeserializer::deserialize_date(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+    sparrow::array array_deserializer::deserialize_date(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                        const std::span<const uint8_t>& body,
                                                        const std::string& name,
                                                        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
@@ -196,7 +196,7 @@ namespace sparrow_ipc
         }
     }
 
-    sparrow::array ArrayDeserializer::deserialize_interval(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+    sparrow::array array_deserializer::deserialize_interval(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                            const std::span<const uint8_t>& body,
                                                            const std::string& name,
                                                            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
@@ -215,7 +215,7 @@ namespace sparrow_ipc
         }
     }
 
-    sparrow::array ArrayDeserializer::deserialize_duration(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+    sparrow::array array_deserializer::deserialize_duration(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                            const std::span<const uint8_t>& body,
                                                            const std::string& name,
                                                            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
@@ -235,7 +235,7 @@ namespace sparrow_ipc
         }
     }
 
-    sparrow::array ArrayDeserializer::deserialize_time(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+    sparrow::array array_deserializer::deserialize_time(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                        const std::span<const uint8_t>& body,
                                                        const std::string& name,
                                                        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
@@ -255,7 +255,7 @@ namespace sparrow_ipc
         }
     }
 
-    sparrow::array ArrayDeserializer::deserialize_timestamp(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+    sparrow::array array_deserializer::deserialize_timestamp(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                             const std::span<const uint8_t>& body,
                                                             const std::string& name,
                                                             const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
