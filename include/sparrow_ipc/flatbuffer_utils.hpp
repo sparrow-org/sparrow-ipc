@@ -1,4 +1,7 @@
 #pragma once
+
+#include <ranges>
+
 #include <flatbuffers/flatbuffers.h>
 #include <Message_generated.h>
 
@@ -173,6 +176,8 @@ namespace sparrow_ipc
 
     namespace details
     {
+        std::size_t get_nb_buffers_to_process(const std::string_view& format, const std::size_t orig_buffers_size);
+
         template <typename Func>
         void fill_buffers_impl(
             const sparrow::arrow_proxy& arrow_proxy,
@@ -182,12 +187,15 @@ namespace sparrow_ipc
         )
         {
             const auto& buffers = arrow_proxy.buffers();
-            for (const auto& buffer : buffers)
+            auto nb_buffers = get_nb_buffers_to_process(arrow_proxy.schema().format, buffers.size());
+            std::ranges::for_each(buffers | std::views::take(nb_buffers),
+                [&](const auto& buffer)
             {
                 int64_t size = get_buffer_size(buffer);
                 flatbuf_buffers.emplace_back(offset, size);
                 offset += utils::align_to_8(size);
-            }
+            });
+
             for (const auto& child : arrow_proxy.children())
             {
                 fill_buffers_impl(child, flatbuf_buffers, offset, get_buffer_size);

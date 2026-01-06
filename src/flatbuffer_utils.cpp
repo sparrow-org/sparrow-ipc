@@ -9,6 +9,21 @@
 
 namespace sparrow_ipc
 {
+    namespace details
+    {
+        std::size_t get_nb_buffers_to_process(const std::string_view& format, const std::size_t orig_buffers_size)
+        {
+            // If the array data type is a view type, we should not consider the last buffer (corresponding to the variadic buffer sizes)
+            if (const auto type = sparrow::format_to_data_type(format);
+                type == sparrow::data_type::STRING_VIEW || type == sparrow::data_type::BINARY_VIEW)
+            {
+                auto num_buffers_to_process = (orig_buffers_size > 0) ? orig_buffers_size - 1 : 0;
+                return num_buffers_to_process;
+            }
+            return orig_buffers_size;
+        }
+    }
+
     namespace
     {
         std::pair<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>>
@@ -633,27 +648,33 @@ namespace sparrow_ipc
     )
     {
         int64_t total_size = 0;
+        const auto& buffers = arrow_proxy.buffers();
+        auto nb_buffers = details::get_nb_buffers_to_process(arrow_proxy.schema().format, buffers.size());
+
         if (compression.has_value())
         {
             if (!cache)
             {
                 throw std::invalid_argument("Compression type set but no cache is given.");
             }
-            for (const auto& buffer : arrow_proxy.buffers())
-            {
-                total_size += utils::align_to_8(get_compressed_size(
-                    compression.value(),
-                    std::span<const uint8_t>(buffer.data(), buffer.size()),
-                    cache.value().get()
-                ));
-            }
+
+            total_size = sparrow::ranges::accumulate(
+                buffers | std::views::take(nb_buffers), int64_t{0},
+                [&](int64_t acc, const auto& buffer) {
+                    return acc + utils::align_to_8(get_compressed_size(
+                        compression.value(),
+                        std::span<const uint8_t>(buffer.data(), buffer.size()),
+                        cache.value().get()
+                    ));
+                });
         }
         else
         {
-            for (const auto& buffer : arrow_proxy.buffers())
-            {
-                total_size += utils::align_to_8(buffer.size());
-            }
+            total_size = sparrow::ranges::accumulate(
+                buffers | std::views::take(nb_buffers), int64_t{0},
+                [&](int64_t acc, const auto& buffer) {
+                    return acc + utils::align_to_8(buffer.size());
+                });
         }
 
         for (const auto& child : arrow_proxy.children())
@@ -706,8 +727,7 @@ namespace sparrow_ipc
                     const auto& sizes_buffer = proxy.buffers().back();
                     const int64_t num_variadic_data_buffers = sizes_buffer.size() / sizeof(int64_t);
 
-                    // TODO should be only num_variadic_data_buffers
-                    counts.push_back(num_variadic_data_buffers + 1);
+                    counts.push_back(num_variadic_data_buffers);
                 }
             }
             return counts;

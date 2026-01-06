@@ -13,7 +13,11 @@ namespace sparrow_ipc
                    std::optional<CompressionType> compression,
                    std::optional<std::reference_wrapper<CompressionCache>> cache)
     {
-        std::for_each(arrow_proxy.buffers().begin(), arrow_proxy.buffers().end(), [&](const auto& buffer) {
+        const auto& buffers = arrow_proxy.buffers();
+        auto nb_buffers = details::get_nb_buffers_to_process(arrow_proxy.schema().format, buffers.size());
+
+        std::for_each(buffers.begin(), buffers.begin() + nb_buffers, [&](const auto& buffer)
+        {
             if (compression.has_value())
             {
                 if (!cache)
