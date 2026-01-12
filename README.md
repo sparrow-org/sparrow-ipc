@@ -1,10 +1,10 @@
 # sparrow-ipc
 
-[![GHA Linux](https://github.com/quantstack/sparrow-ipc/actions/workflows/linux.yml/badge.svg)](https://github.com/quantstack/sparrow-ipc/actions/workflows/linux.yml)
-[![GHA OSX](https://github.com/quantstack/sparrow-ipc/actions/workflows/osx.yml/badge.svg)](https://github.com/quantstack/sparrow-ipc/actions/workflows/osx.yml)
-[![GHA Windows](https://github.com/quantstack/sparrow-ipc/actions/workflows/windows.yml/badge.svg)](https://github.com/quantstack/sparrow-ipc/actions/workflows/windows.yml)
-[![GHA Docs](https://github.com/quantstack/sparrow-ipc/actions/workflows/docs.yaml/badge.svg)](https://github.com/quantstack/sparrow-ipc/actions/workflows/docs.yaml)
-[![Integration tests](https://github.com/quantstack/sparrow-ipc/actions/workflows/integration_tests.yaml/badge.svg?branch=main)](https://github.com/quantstack/sparrow-ipc/actions/workflows/integration_tests.yaml)
+[![GHA Linux](https://github.com/sparrow-org/sparrow-ipc/actions/workflows/linux.yml/badge.svg)](https://github.com/sparrow-org/sparrow-ipc/actions/workflows/linux.yml)
+[![GHA OSX](https://github.com/sparrow-org/sparrow-ipc/actions/workflows/osx.yml/badge.svg)](https://github.com/sparrow-org/sparrow-ipc/actions/workflows/osx.yml)
+[![GHA Windows](https://github.com/sparrow-org/sparrow-ipc/actions/workflows/windows.yml/badge.svg)](https://github.com/sparrow-org/sparrow-ipc/actions/workflows/windows.yml)
+[![GHA Docs](https://github.com/sparrow-org/sparrow-ipc/actions/workflows/docs.yaml/badge.svg)](https://github.com/sparrow-org/sparrow-ipc/actions/workflows/docs.yaml)
+[![Integration tests](https://github.com/sparrow-org/sparrow-ipc/actions/workflows/integration_tests.yaml/badge.svg?branch=main)](https://github.com/sparrow-org/sparrow-ipc/actions/workflows/integration_tests.yaml)
 
 **!!!Sparrow-IPC is still under development and is not ready for production use!!!**
 
@@ -196,7 +196,7 @@ void deserializer_incremental_example(const std::vector<std::vector<uint8_t>>& s
 
 ## Documentation
 
-The documentation (currently being written) can be found at https://quantstack.github.io/sparrow-ipc/index.html
+The documentation (currently being written) can be found at https://sparrow-org.github.io/sparrow-ipc/
 
 ## Acknowledgements
 

@@ -9,7 +9,7 @@ Sparrow-IPC                             {#mainpage}
 Introduction
 ------------
 
-Sparrow-IPC provides high-performance, **zero-copy** serialization and deserialization of record batches, adhering to both [Sparrow](https://github.com/man-group/sparrow) and [Apache Arrow IPC specifications](https://arrow.apache.org/docs/format/Columnar.html#serialization-and-interprocess-communication-ipc).
+Sparrow-IPC provides high-performance serialization and deserialization of record batches, adhering to both [Sparrow](https://github.com/man-group/sparrow) and [Apache Arrow IPC specifications](https://arrow.apache.org/docs/format/Columnar.html#serialization-and-interprocess-communication-ipc).
 
 Sparrow-IPC requires a modern C++ compiler supporting C++20:
 
@@ -20,7 +20,7 @@ Sparrow-IPC requires a modern C++ compiler supporting C++20:
 | Apple Clang | 16 or higher    |
 | MSVC        | 19.41 or higher |
 
-This software is licensed under the BSD-3-Clause license. See the [LICENSE](https://github.com/QuantStack/sparrow-ipc/blob/main/LICENSE) file for details.
+This software is licensed under the BSD-3-Clause license. See the [LICENSE](https://github.com/sparrow-org/sparrow-ipc/blob/main/LICENSE) file for details.
 
 Getting Started
 ---------------

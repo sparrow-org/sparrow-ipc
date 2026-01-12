@@ -34,7 +34,7 @@ jobs:
 
   deploy:
     # only run on main branch
-    if: github.ref == 'refs/heads/main' && github.repository == 'QuantStack/sparrow-ipc'
+    if: github.ref == 'refs/heads/main' && github.repository == 'sparrow-org/sparrow-ipc'
 
     # Add a dependency to the build job
     needs: build_docs

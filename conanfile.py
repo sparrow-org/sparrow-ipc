@@ -13,8 +13,8 @@ class SparrowIPCRecipe(ConanFile):
     description = "C++20 library for memory-mapped serialization of Apache Arrow data."
     license = "BSD-3-Clause"
     author = "QuantStack"
-    url = "https://github.com/QuantStack/sparrow-ipc"
-    homepage = "https://github.com/QuantStack/sparrow-ipc"
+    url = "https://github.com/sparrow-org/sparrow-ipc"
+    homepage = "https://github.com/sparrow-org/sparrow-ipc"
     topics = ("arrow", "apache arrow", "columnar format", "dataframe", "ipc", "serialization", "deserialization", "flatbuffers")
     package_type = "library"
     settings = "os", "arch", "compiler", "build_type"
