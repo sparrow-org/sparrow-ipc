@@ -9,12 +9,13 @@
 namespace sparrow_ipc
 {
     sparrow::null_array deserialize_null_array(
-        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-        std::span<const uint8_t> body,
+        const org::apache::arrow::flatbuf::RecordBatch&,
+        std::span<const uint8_t>,
+        const int64_t length,
         std::string_view name,
         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
         bool nullable,
-        size_t& buffer_index
+        size_t&
     )
     {
         const std::string_view format = data_type_to_format(
@@ -29,10 +30,10 @@ namespace sparrow_ipc
         }
 
         ArrowSchema schema = make_non_owning_arrow_schema(format, name.data(), metadata, flags, 0, nullptr, nullptr);
-        std::vector<sparrow_ipc::arrow_array_private_data::optionally_owned_buffer> buffers;
-        ArrowArray array = make_arrow_array<sparrow_ipc::arrow_array_private_data>(
-            record_batch.length(),
-            record_batch.length(),
+        std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
+        ArrowArray array = make_arrow_array<arrow_array_private_data>(
+            length,
+            length,
             0,
             0,
             nullptr,

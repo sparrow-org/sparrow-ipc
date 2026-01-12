@@ -17,6 +17,7 @@ namespace sparrow_ipc
     [[nodiscard]] T deserialize_variable_size_binary_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
+        const int64_t length,
         std::string_view name,
         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
         bool nullable,
@@ -63,10 +64,10 @@ namespace sparrow_ipc
         }
 
         // TODO bitmap_ptr is not used anymore... Leave it for now, and remove later if no need confirmed
-        const auto [bitmap_ptr, null_count] = utils::get_bitmap_pointer_and_null_count(validity_buffer_span, record_batch.length());
+        const auto [bitmap_ptr, null_count] = utils::get_bitmap_pointer_and_null_count(validity_buffer_span, length);
 
         ArrowArray array = make_arrow_array<arrow_array_private_data>(
-            record_batch.length(),
+            length,
             null_count,
             0,
             0,

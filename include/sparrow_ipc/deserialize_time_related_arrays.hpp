@@ -21,6 +21,7 @@ namespace sparrow_ipc
     [[nodiscard]] sparrow::date_array<T> deserialize_date_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
+        const int64_t length,
         std::string_view name,
         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
         bool nullable,
@@ -30,6 +31,7 @@ namespace sparrow_ipc
         return detail::deserialize_simple_array<sparrow::date_array, T>(
             record_batch,
             body,
+            length,
             name,
             metadata,
             nullable,
@@ -42,6 +44,7 @@ namespace sparrow_ipc
     [[nodiscard]] sparrow::timestamp_array<T> deserialize_timestamp_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
+        const int64_t length,
         std::string_view name,
         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
         bool nullable,
@@ -56,6 +59,7 @@ namespace sparrow_ipc
         return detail::deserialize_simple_array<sparrow::timestamp_array, T>(
             record_batch,
             body,
+            length,
             name,
             metadata,
             nullable,
@@ -68,6 +72,7 @@ namespace sparrow_ipc
     [[nodiscard]] sparrow::timestamp_without_timezone_array<T> deserialize_timestamp_without_timezone_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
+        const int64_t length,
         std::string_view name,
         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
         bool nullable,
@@ -77,6 +82,7 @@ namespace sparrow_ipc
         return detail::deserialize_simple_array<sparrow::timestamp_without_timezone_array, T>(
             record_batch,
             body,
+            length,
             name,
             metadata,
             nullable,
@@ -89,6 +95,7 @@ namespace sparrow_ipc
     [[nodiscard]] sparrow::time_array<T> deserialize_time_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
+        const int64_t length,
         std::string_view name,
         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
         bool nullable,
@@ -98,6 +105,7 @@ namespace sparrow_ipc
         return detail::deserialize_simple_array<sparrow::time_array, T>(
             record_batch,
             body,
+            length,
             name,
             metadata,
             nullable,

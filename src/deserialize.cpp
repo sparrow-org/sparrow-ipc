@@ -41,8 +41,6 @@ namespace sparrow_ipc
         const std::vector<std::optional<std::vector<sparrow::metadata_pair>>>& field_metadata
     )
     {
-        static const array_deserializer arr_deserializer;
-
         const size_t num_fields = schema.fields() == nullptr ? 0 : static_cast<size_t>(schema.fields()->size());
         std::vector<sparrow::array> arrays;
         if (num_fields == 0)
@@ -64,9 +62,10 @@ namespace sparrow_ipc
             const bool nullable = field->nullable();
             const auto field_type = field->type_type();
 
-            arrays.emplace_back(arr_deserializer.deserialize(
+            arrays.emplace_back(array_deserializer::deserialize(
                 record_batch,
                 encapsulated_message.body(),
+                record_batch.length(),
                 name,
                 metadata,
                 nullable,

@@ -8,9 +8,14 @@
 #include <vector>
 
 #include <sparrow/array.hpp>
+#include <sparrow/list_array.hpp>
+#include <sparrow/struct_array.hpp>
+#include <sparrow/types/data_type.hpp>
 
 #include "Message_generated.h"
 
+#include "sparrow_ipc/arrow_interface/arrow_array.hpp"
+#include "sparrow_ipc/arrow_interface/arrow_schema.hpp"
 #include "sparrow_ipc/deserialize_primitive_array.hpp"
 #include "sparrow_ipc/deserialize_variable_size_binary_array.hpp"
 #include "sparrow_ipc/deserialize_variable_size_binary_view_array.hpp"
@@ -37,6 +42,7 @@ namespace sparrow_ipc
         using deserializer_func = std::function<sparrow::array(
             const org::apache::arrow::flatbuf::RecordBatch&,
             const std::span<const uint8_t>&,
+            const int64_t,
             const std::string&,
             const std::optional<std::vector<sparrow::metadata_pair>>&,
             bool,
@@ -61,6 +67,7 @@ namespace sparrow_ipc
          *
          * @param record_batch The Flatbuffer RecordBatch containing the data.
          * @param body The raw byte buffer of the message body.
+         * @param length The number of elements in the array to deserialize.
          * @param name The name of the field.
          * @param metadata The metadata associated with the field.
          * @param nullable Whether the field is nullable.
@@ -70,8 +77,9 @@ namespace sparrow_ipc
          * @return A `sparrow::array` containing the deserialized data.
          * @throws std::runtime_error if the field type is not supported.
          */
-        sparrow::array deserialize(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+        static sparrow::array deserialize(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                    const std::span<const uint8_t>& body,
+                                   const int64_t length,
                                    const std::string& name,
                                    const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                    bool nullable,
@@ -79,11 +87,18 @@ namespace sparrow_ipc
                                    size_t& variadic_counts_idx,
                                    const org::apache::arrow::flatbuf::Field& field) const;
     private:
-        std::unordered_map<org::apache::arrow::flatbuf::Type, deserializer_func> m_deserializer_map;
+        inline static std::unordered_map<org::apache::arrow::flatbuf::Type, deserializer_func> m_deserializer_map;
+
+        /**
+         * @bried Populate the map with function pointers to the static
+         * deserialization methods for each supported Arrow data type.
+         */
+        static void initialize_deserializer_map();
 
         template<typename T>
         static sparrow::array deserialize_primitive(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                     const std::span<const uint8_t>& body,
+                                                    const int64_t length,
                                                     const std::string& name,
                                                     const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                     bool nullable,
@@ -92,13 +107,14 @@ namespace sparrow_ipc
                                                     const org::apache::arrow::flatbuf::Field&)
         {
             return sparrow::array(deserialize_primitive_array<T>(
-                record_batch, body, name, metadata, nullable, buffer_index
+                record_batch, body, length, name, metadata, nullable, buffer_index
             ));
         }
 
         template<typename T>
         static sparrow::array deserialize_variable_size_binary(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                                const std::span<const uint8_t>& body,
+                                                               const int64_t length,
                                                                const std::string& name,
                                                                const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                                bool nullable,
@@ -107,7 +123,144 @@ namespace sparrow_ipc
                                                                const org::apache::arrow::flatbuf::Field&)
         {
             return sparrow::array(deserialize_variable_size_binary_array<T>(
-                record_batch, body, name, metadata, nullable, buffer_index
+                record_batch, body, length, name, metadata, nullable, buffer_index
+            ));
+        }
+
+        // TODO refactor the 'list' related fcts when testing with recursive is handled
+        template <typename T>
+        [[nodiscard]] static T deserialize_list_array(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            const org::apache::arrow::flatbuf::Field& field)
+        {
+            // Set up flags based on nullable
+            std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
+            if (nullable)
+            {
+                flags = std::unordered_set<sparrow::ArrowFlag>{sparrow::ArrowFlag::NULLABLE};
+            }
+
+            const auto compression = record_batch.compression();
+            std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
+
+            auto validity_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
+            auto offsets_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
+
+            using offset_type = typename T::offset_type;
+            int64_t child_length;
+
+            const auto* offsets_ptr = reinterpret_cast<const offset_type*>(offsets_buffer_span.data());
+
+            if (compression)
+            {
+                auto processed_offsets = utils::get_decompressed_buffer(offsets_buffer_span, compression);
+                const offset_type* offsets_ptr = nullptr;
+                if (const auto* buf_ptr = std::get_if<sparrow::buffer<uint8_t>>(&processed_offsets))
+                {
+                    offsets_ptr = reinterpret_cast<const offset_type*>(buf_ptr->data());
+                }
+                else if (const auto* span_ptr = std::get_if<std::span<const uint8_t>>(&processed_offsets))
+                {
+                    offsets_ptr = reinterpret_cast<const offset_type*>(span_ptr->data());
+                }
+                else
+                {
+                    throw std::runtime_error("Could not get offsets pointer after decompression.");
+                }
+                child_length = offsets_ptr[length];
+
+                buffers.push_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
+                buffers.push_back(std::move(processed_offsets));
+            }
+            else
+            {
+                const auto offsets = reinterpret_cast<const offset_type*>(offsets_buffer_span.data());
+                child_length = offsets[length];
+
+                buffers.emplace_back(validity_buffer_span);
+                buffers.emplace_back(offsets_buffer_span);
+            }
+
+            // Deserialize child array
+            const auto* child_field = field.children()->Get(0);
+            if (!child_field)
+            {
+                throw std::runtime_error("List array field has no child field.");
+            }
+
+            std::optional<std::vector<sparrow::metadata_pair>> child_metadata;
+            if (child_field->custom_metadata())
+            {
+                child_metadata = to_sparrow_metadata(*child_field->custom_metadata());
+            }
+
+            sparrow::array child_array = array_deserializer::deserialize(
+                record_batch,
+                body,
+                child_length,
+                child_field->name()->str(),
+                child_metadata,
+                child_field->nullable(),
+                buffer_index,
+                *child_field
+            );
+
+            const std::string_view format = sparrow::data_type_to_format(sparrow::detail::get_data_type_from_array<T>::get());
+
+            auto [child_arrow_array, child_arrow_schema] = sparrow::extract_arrow_structures(std::move(child_array));
+
+            auto child_arrow_array_ptr = std::make_unique<ArrowArray>(std::move(child_arrow_array));
+            auto child_arrow_schema_ptr = std::make_unique<ArrowSchema>(std::move(child_arrow_schema));
+
+            auto** schema_children = new ArrowSchema*[1];
+            schema_children[0] = child_arrow_schema_ptr.release();
+            ArrowSchema schema = make_non_owning_arrow_schema(
+                format,
+                name.data(),
+                metadata,
+                flags,
+                1, // one child
+                schema_children,
+                nullptr
+            );
+
+            const auto [bitmap_ptr, null_count] = utils::get_bitmap_pointer_and_null_count(validity_buffer_span, length);
+
+            auto** array_children = new ArrowArray*[1];
+            array_children[0] = child_arrow_array_ptr.release();
+            ArrowArray array = make_arrow_array<arrow_array_private_data>(
+                length,
+                null_count,
+                0,
+                1,
+                array_children,
+                nullptr,
+                std::move(buffers)
+            );
+
+            sparrow::arrow_proxy ap{std::move(array), std::move(schema)};
+            return T{std::move(ap)};
+        }
+
+        template<typename T>
+        static sparrow::array deserialize_list(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            const org::apache::arrow::flatbuf::Field& field)
+        {
+            return sparrow::array(deserialize_list_array<T>(
+                record_batch, body, length, name, metadata, nullable, buffer_index, field
             ));
         }
 
@@ -134,6 +287,7 @@ namespace sparrow_ipc
 
         static sparrow::array deserialize_int(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                               const std::span<const uint8_t>& body,
+                                              const int64_t length,
                                               const std::string& name,
                                               const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                               bool nullable,
@@ -143,6 +297,7 @@ namespace sparrow_ipc
 
         static sparrow::array deserialize_float(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                 const std::span<const uint8_t>& body,
+                                                const int64_t length,
                                                 const std::string& name,
                                                 const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                 bool nullable,
@@ -152,6 +307,7 @@ namespace sparrow_ipc
 
         static sparrow::array deserialize_fixed_size_binary(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                             const std::span<const uint8_t>& body,
+                                                            const int64_t length,
                                                             const std::string& name,
                                                             const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                             bool nullable,
@@ -161,6 +317,7 @@ namespace sparrow_ipc
 
         static sparrow::array deserialize_decimal(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                   const std::span<const uint8_t>& body,
+                                                  const int64_t length,
                                                   const std::string& name,
                                                   const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                   bool nullable,
@@ -170,6 +327,7 @@ namespace sparrow_ipc
 
         static sparrow::array deserialize_null(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                const std::span<const uint8_t>& body,
+                                               const int64_t length,
                                                const std::string& name,
                                                const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                bool nullable,
@@ -179,6 +337,7 @@ namespace sparrow_ipc
 
         static sparrow::array deserialize_date(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                const std::span<const uint8_t>& body,
+                                               const int64_t length,
                                                const std::string& name,
                                                const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                bool nullable,
@@ -188,6 +347,7 @@ namespace sparrow_ipc
 
         static sparrow::array deserialize_interval(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                    const std::span<const uint8_t>& body,
+                                                   const int64_t length,
                                                    const std::string& name,
                                                    const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                    bool nullable,
@@ -197,6 +357,7 @@ namespace sparrow_ipc
 
         static sparrow::array deserialize_duration(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                    const std::span<const uint8_t>& body,
+                                                   const int64_t length,
                                                    const std::string& name,
                                                    const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                    bool nullable,
@@ -206,6 +367,7 @@ namespace sparrow_ipc
 
         static sparrow::array deserialize_time(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                const std::span<const uint8_t>& body,
+                                               const int64_t length,
                                                const std::string& name,
                                                const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                bool nullable,
@@ -215,11 +377,30 @@ namespace sparrow_ipc
 
         static sparrow::array deserialize_timestamp(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
                                                     const std::span<const uint8_t>& body,
+                                                    const int64_t length,
                                                     const std::string& name,
                                                     const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                     bool nullable,
                                                     size_t& buffer_index,
                                                     size_t&,
                                                     const org::apache::arrow::flatbuf::Field& field);
+
+        static sparrow::array deserialize_fixed_size_list(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+                                                          const std::span<const uint8_t>& body,
+                                                          const int64_t length,
+                                                          const std::string& name,
+                                                          const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+                                                          bool nullable,
+                                                          size_t& buffer_index,
+                                                          const org::apache::arrow::flatbuf::Field& field);
+
+        static sparrow::array deserialize_struct(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+                                                 const std::span<const uint8_t>& body,
+                                                 const int64_t length,
+                                                 const std::string& name,
+                                                 const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+                                                 bool nullable,
+                                                 size_t& buffer_index,
+                                                 const org::apache::arrow::flatbuf::Field& field);
     };
 }

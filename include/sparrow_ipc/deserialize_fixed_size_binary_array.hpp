@@ -13,6 +13,7 @@ namespace sparrow_ipc
     [[nodiscard]] sparrow::fixed_width_binary_array deserialize_fixed_width_binary_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
+        const int64_t length,
         std::string_view name,
         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
         bool nullable,

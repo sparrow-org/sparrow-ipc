@@ -17,6 +17,7 @@ namespace sparrow_ipc
     [[nodiscard]] sparrow::duration_array<T> deserialize_duration_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
+        const int64_t length,
         std::string_view name,
         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
         bool nullable,
@@ -26,6 +27,7 @@ namespace sparrow_ipc
         return detail::deserialize_simple_array<sparrow::duration_array, T>(
             record_batch,
             body,
+            length,
             name,
             metadata,
             nullable,
