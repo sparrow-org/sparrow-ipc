@@ -20,7 +20,7 @@ namespace sparrow_ipc
         constexpr int32_t BIT_WIDTH_64 = 64;
     }
 
-    array_deserializer::array_deserializer()
+    void array_deserializer::initialize_deserializer_map()
     {
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Bool] = &deserialize_primitive<bool>;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Int] = &deserialize_int;
@@ -53,7 +53,7 @@ namespace sparrow_ipc
                                                   bool nullable,
                                                   size_t& buffer_index,
                                                   size_t& variadic_counts_idx,
-                                                  const org::apache::arrow::flatbuf::Field& field) const
+                                                  const org::apache::arrow::flatbuf::Field& field)
     {
         initialize_deserializer_map();
         auto it = m_deserializer_map.find(field.type_type());
@@ -340,6 +340,7 @@ namespace sparrow_ipc
             const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
             bool nullable,
             size_t& buffer_index,
+            size_t& variadic_counts_idx,
             const org::apache::arrow::flatbuf::Field& field)
         {
             std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
@@ -387,6 +388,7 @@ namespace sparrow_ipc
                 child_metadata,
                 child_field->nullable(),
                 buffer_index,
+                variadic_counts_idx,
                 *child_field
             );
 
@@ -424,6 +426,7 @@ namespace sparrow_ipc
             sparrow::arrow_proxy ap{std::move(array), std::move(schema)};
             return sparrow::fixed_sized_list_array{std::move(ap)};
         }
+
         [[nodiscard]] sparrow::struct_array deserialize_struct_array(
             const org::apache::arrow::flatbuf::RecordBatch& record_batch,
             const std::span<const uint8_t>& body,
@@ -432,6 +435,7 @@ namespace sparrow_ipc
             const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
             bool nullable,
             size_t& buffer_index,
+            size_t& variadic_counts_idx,
             const org::apache::arrow::flatbuf::Field& field)
         {
             std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
@@ -476,6 +480,7 @@ namespace sparrow_ipc
                     child_metadata,
                     child_field->nullable(),
                     buffer_index,
+                    variadic_counts_idx,
                     *child_field
                 ));
             }
@@ -535,10 +540,11 @@ namespace sparrow_ipc
         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
         bool nullable,
         size_t& buffer_index,
+        size_t& variadic_counts_idx,
         const org::apache::arrow::flatbuf::Field& field)
     {
         return sparrow::array(deserialize_fixed_size_list_array(
-            record_batch, body, length, name, metadata, nullable, buffer_index, field
+            record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field
         ));
     }
 
@@ -550,10 +556,11 @@ namespace sparrow_ipc
         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
         bool nullable,
         size_t& buffer_index,
+        size_t& variadic_counts_idx,
         const org::apache::arrow::flatbuf::Field& field)
     {
         return sparrow::array(deserialize_struct_array(
-            record_batch, body, length, name, metadata, nullable, buffer_index, field
+            record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field
         ));
     }
 }

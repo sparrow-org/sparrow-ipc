@@ -52,14 +52,6 @@ namespace sparrow_ipc
         )>;
 
         /**
-         * @brief Constructs the array_deserializer and initializes the deserializer map.
-         *
-         * The constructor populates the map with function pointers to the static
-         * deserialization methods for each supported Arrow data type.
-         */
-        array_deserializer();
-
-        /**
          * @brief Deserializes an array based on its field description.
          *
          * This is the main entry point of the deserializer. It looks up the appropriate
@@ -85,7 +77,7 @@ namespace sparrow_ipc
                                    bool nullable,
                                    size_t& buffer_index,
                                    size_t& variadic_counts_idx,
-                                   const org::apache::arrow::flatbuf::Field& field) const;
+                                   const org::apache::arrow::flatbuf::Field& field);
     private:
         inline static std::unordered_map<org::apache::arrow::flatbuf::Type, deserializer_func> m_deserializer_map;
 
@@ -127,6 +119,28 @@ namespace sparrow_ipc
             ));
         }
 
+        template<typename T>
+        static sparrow::array deserialize_variable_size_binary_view(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+                                                               const std::span<const uint8_t>& body,
+                                                               const int64_t length,
+                                                               const std::string& name,
+                                                               const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+                                                               bool nullable,
+                                                               size_t& buffer_index,
+                                                               size_t& variadic_counts_idx,
+                                                               const org::apache::arrow::flatbuf::Field&)
+        {
+            const auto* variadic_counts = record_batch.variadicBufferCounts();
+            int64_t data_buffers_size = 0;
+            if (variadic_counts && variadic_counts_idx < variadic_counts->size())
+            {
+                data_buffers_size = variadic_counts->Get(variadic_counts_idx++);
+            }
+            return sparrow::array(deserialize_variable_size_binary_view_array<T>(
+                record_batch, body, length, name, metadata, nullable, buffer_index, data_buffers_size
+            ));
+        }
+
         // TODO refactor the 'list' related fcts when testing with recursive is handled
         template <typename T>
         [[nodiscard]] static T deserialize_list_array(
@@ -137,6 +151,7 @@ namespace sparrow_ipc
             const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
             bool nullable,
             size_t& buffer_index,
+            size_t& variadic_counts_idx,
             const org::apache::arrow::flatbuf::Field& field)
         {
             // Set up flags based on nullable
@@ -208,6 +223,7 @@ namespace sparrow_ipc
                 child_metadata,
                 child_field->nullable(),
                 buffer_index,
+                variadic_counts_idx,
                 *child_field
             );
 
@@ -257,31 +273,11 @@ namespace sparrow_ipc
             const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
             bool nullable,
             size_t& buffer_index,
+            size_t& variadic_counts_idx,
             const org::apache::arrow::flatbuf::Field& field)
         {
             return sparrow::array(deserialize_list_array<T>(
-                record_batch, body, length, name, metadata, nullable, buffer_index, field
-            ));
-        }
-
-        template<typename T>
-        static sparrow::array deserialize_variable_size_binary_view(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                               const std::span<const uint8_t>& body,
-                                                               const std::string& name,
-                                                               const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                               bool nullable,
-                                                               size_t& buffer_index,
-                                                               size_t& variadic_counts_idx,
-                                                               const org::apache::arrow::flatbuf::Field&)
-        {
-            const auto* variadic_counts = record_batch.variadicBufferCounts();
-            int64_t data_buffers_size = 0;
-            if (variadic_counts && variadic_counts_idx < variadic_counts->size())
-            {
-                data_buffers_size = variadic_counts->Get(variadic_counts_idx++);
-            }
-            return sparrow::array(deserialize_variable_size_binary_view_array<T>(
-                record_batch, body, name, metadata, nullable, buffer_index, data_buffers_size
+                record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field
             ));
         }
 
@@ -392,6 +388,7 @@ namespace sparrow_ipc
                                                           const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                           bool nullable,
                                                           size_t& buffer_index,
+                                                          size_t& variadic_counts_idx,
                                                           const org::apache::arrow::flatbuf::Field& field);
 
         static sparrow::array deserialize_struct(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -401,6 +398,7 @@ namespace sparrow_ipc
                                                  const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                  bool nullable,
                                                  size_t& buffer_index,
+                                                 size_t& variadic_counts_idx,
                                                  const org::apache::arrow::flatbuf::Field& field);
     };
 }
