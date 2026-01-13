@@ -231,11 +231,8 @@ namespace sparrow_ipc
 
             auto [child_arrow_array, child_arrow_schema] = sparrow::extract_arrow_structures(std::move(child_array));
 
-            auto child_arrow_array_ptr = std::make_unique<ArrowArray>(std::move(child_arrow_array));
-            auto child_arrow_schema_ptr = std::make_unique<ArrowSchema>(std::move(child_arrow_schema));
-
             auto** schema_children = new ArrowSchema*[1];
-            schema_children[0] = child_arrow_schema_ptr.release();
+            schema_children[0] = new ArrowSchema(std::move(child_arrow_schema));
             ArrowSchema schema = make_non_owning_arrow_schema(
                 format,
                 name.data(),
@@ -249,7 +246,7 @@ namespace sparrow_ipc
             const auto [bitmap_ptr, null_count] = utils::get_bitmap_pointer_and_null_count(validity_buffer_span, length);
 
             auto** array_children = new ArrowArray*[1];
-            array_children[0] = child_arrow_array_ptr.release();
+            array_children[0] = new ArrowArray(std::move(child_arrow_array));
             ArrowArray array = make_arrow_array<arrow_array_private_data>(
                 length,
                 null_count,

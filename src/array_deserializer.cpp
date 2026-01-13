@@ -396,11 +396,8 @@ namespace sparrow_ipc
 
             auto [child_arrow_array, child_arrow_schema] = sparrow::extract_arrow_structures(std::move(child_array));
 
-            auto child_arrow_array_ptr = std::make_unique<ArrowArray>(std::move(child_arrow_array));
-            auto child_arrow_schema_ptr = std::make_unique<ArrowSchema>(std::move(child_arrow_schema));
-
             auto** schema_children = new ArrowSchema*[1];
-            schema_children[0] = child_arrow_schema_ptr.release();
+            schema_children[0] = new ArrowSchema(std::move(child_arrow_schema));
             ArrowSchema schema = make_non_owning_arrow_schema(
                 format,
                 name.data(),
@@ -412,7 +409,7 @@ namespace sparrow_ipc
             );
 
             auto** array_children = new ArrowArray*[1];
-            array_children[0] = child_arrow_array_ptr.release();
+            array_children[0] = new ArrowArray(std::move(child_arrow_array));
             ArrowArray array = make_arrow_array<arrow_array_private_data>(
                 length,
                 null_count,
@@ -487,41 +484,35 @@ namespace sparrow_ipc
 
             const std::string_view format = data_type_to_format(sparrow::detail::get_data_type_from_array<sparrow::struct_array>::get());
 
-            std::vector<std::unique_ptr<ArrowSchema>> child_schemas_owner;
-            std::vector<std::unique_ptr<ArrowArray>> child_arrays_owner;
+            const size_t n_child_arrays = child_arrays.size();
 
-            for (auto& child_array : child_arrays)
+            auto** schema_children = new ArrowSchema*[n_child_arrays];
+            auto** array_children  = new ArrowArray*[n_child_arrays];
+
+            for (size_t i = 0; i < n_child_arrays; ++i)
             {
-                auto [arr, schema] = sparrow::extract_arrow_structures(std::move(child_array));
-                child_arrays_owner.push_back(std::make_unique<ArrowArray>(std::move(arr)));
-                child_schemas_owner.push_back(std::make_unique<ArrowSchema>(std::move(schema)));
+                auto [arr, schema] =
+                    sparrow::extract_arrow_structures(std::move(child_arrays[i]));
+
+                schema_children[i] = new ArrowSchema(std::move(schema));
+                array_children[i]  = new ArrowArray(std::move(arr));
             }
 
-            auto** schema_children = new ArrowSchema*[child_schemas_owner.size()];
-            for(size_t i = 0; i < child_schemas_owner.size(); ++i)
-            {
-                schema_children[i] = child_schemas_owner[i].release();
-            }
             ArrowSchema schema = make_non_owning_arrow_schema(
                 format,
                 name.data(),
                 metadata,
                 flags,
-                child_arrays.size(),
+                n_child_arrays,
                 schema_children,
                 nullptr
             );
 
-            auto** array_children = new ArrowArray*[child_arrays_owner.size()];
-            for(size_t i = 0; i < child_arrays_owner.size(); ++i)
-            {
-                array_children[i] = child_arrays_owner[i].release();
-            }
             ArrowArray array = make_arrow_array<arrow_array_private_data>(
                 length,
                 null_count,
                 0,
-                child_arrays.size(),
+                n_child_arrays,
                 array_children,
                 nullptr,
                 std::move(buffers)
