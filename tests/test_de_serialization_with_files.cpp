@@ -104,6 +104,73 @@ void compare_record_batches(
                 const auto& column_2_value = column_2[z];
                 CHECK_EQ(column_1_value, column_2_value);
             }
+
+            // Additional check for buffer layout for view data types
+            column_1.visit(
+                [&](const auto& arr1)
+                {
+                    using array_type1 = std::decay_t<decltype(arr1)>;
+                    if constexpr (sparrow::is_variable_size_binary_view_array<array_type1>)
+                    {
+                        using value_type1 = typename array_type1::value_type;
+                        column_2.visit(
+                            [&](const auto& arr2)
+                            {
+                                using array_type2 = std::decay_t<decltype(arr2)>;
+                                if constexpr (sparrow::is_variable_size_binary_view_array<array_type2>)
+                                {
+                                    using value_type2 = typename array_type2::value_type;
+                                    const auto& proxy1 = sparrow::detail::array_access::get_arrow_proxy(arr1);
+                                    const auto& buffers1 = proxy1.buffers();
+
+                                    const auto& proxy2 = sparrow::detail::array_access::get_arrow_proxy(arr2);
+                                    const auto& buffers2 = proxy2.buffers();
+
+                                    REQUIRE_EQ(buffers1.size(), buffers2.size());
+                                    REQUIRE_GE(buffers1.size(), 3); // Minimum: validity, views, sizes_buffer (even if data buffers are empty)
+
+                                    const auto& sizes_buffer_info1 = buffers1.back();
+                                    const auto& sizes_buffer_info2 = buffers2.back();
+
+                                    REQUIRE_EQ(sizes_buffer_info1.size(), sizes_buffer_info2.size());
+
+                                    const size_t num_data_buffers1 = sizes_buffer_info1.size() / sizeof(int64_t);
+                                    const size_t num_data_buffers2 = sizes_buffer_info2.size() / sizeof(int64_t);
+                                    REQUIRE_EQ(num_data_buffers1, num_data_buffers2);
+
+                                    REQUIRE_EQ(buffers1.size(), 3 + num_data_buffers1);
+                                    REQUIRE_EQ(buffers2.size(), 3 + num_data_buffers2);
+
+                                    if (!sizes_buffer_info1.empty())
+                                    {
+                                        const int64_t* sizes_buffer1 = reinterpret_cast<const int64_t*>(sizes_buffer_info1.data());
+                                        const int64_t* sizes_buffer2 = reinterpret_cast<const int64_t*>(sizes_buffer_info2.data());
+                                        for (size_t k = 0; k < num_data_buffers1; ++k)
+                                        {
+                                            CHECK_EQ(sizes_buffer1[k], sizes_buffer2[k]);
+                                            CHECK_EQ(buffers1[k + 2].size(), buffers2[k + 2].size());
+                                        }
+                                    }
+
+                                    // Also compare the contents of the buffers (validity, views, data, variadic buffer sizes)
+                                    for (size_t k = 0; k < buffers1.size(); ++k)
+                                    {
+                                        REQUIRE_EQ(buffers1[k].size(), buffers2[k].size());
+                                        if (buffers1[k].size() > 0)
+                                        {
+                                            CHECK(std::equal(buffers1[k].begin(), buffers1[k].end(), buffers2[k].begin()));
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    FAIL("Incorrect array type");
+                                }
+                            }
+                        );
+                    }
+                }
+            );
         }
     }
 }

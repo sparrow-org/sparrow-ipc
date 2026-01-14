@@ -75,38 +75,51 @@ namespace sparrow_ipc
             buffers.push_back(views_buffer_span);
         }
 
-        // If no data buffers are present, we still need to push an empty data buffer to have things valid in sparrow
-        if (data_buffers_size == 0)
+        std::vector<int64_t> variadic_buffer_sizes;
+        variadic_buffer_sizes.reserve(data_buffers_size);
+
+        auto push_buffer = [&](auto&& buffer)
         {
-            buffers.push_back(arrow_array_private_data::optionally_owned_buffer(std::span<const uint8_t>{}));
-        }
+            variadic_buffer_sizes.push_back(static_cast<int64_t>(buffer.size()));
+            buffers.push_back(std::forward<decltype(buffer)>(buffer));
+        };
 
         for (auto i = 0; i < data_buffers_size; ++i)
         {
-            auto data_buffer_span =
-                utils::get_buffer(record_batch, body, buffer_index);
+            auto data_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
 
             if (compression)
             {
-                buffers.push_back(
-                    utils::get_decompressed_buffer(data_buffer_span, compression)
-                );
+                auto decompressed = utils::get_decompressed_buffer(data_buffer_span, compression);
+                std::visit(
+                    [&](auto&& buf) { push_buffer(buf); },
+                    std::move(decompressed));
             }
             else
             {
-                buffers.push_back(data_buffer_span);
+                push_buffer(data_buffer_span);
             }
         }
+
+        buffers.push_back(
+            sparrow::buffer<uint8_t>(
+                std::vector<uint8_t>(
+                    reinterpret_cast<const uint8_t*>(variadic_buffer_sizes.data()),
+                    reinterpret_cast<const uint8_t*>(variadic_buffer_sizes.data() + variadic_buffer_sizes.size())
+                ),
+                sparrow::buffer<uint8_t>::default_allocator{}
+            )
+        );
 
         const auto [bitmap_ptr, null_count] = utils::get_bitmap_pointer_and_null_count(validity_buffer_span, length);
 
         ArrowArray array = make_arrow_array<arrow_array_private_data>(
             length,
             null_count,
-            0, // n_children
-            0, // n_dictionaries
-            nullptr, // children
-            nullptr, // dictionary
+            0,
+            0,
+            nullptr,
+            nullptr,
             std::move(buffers)
         );
 
