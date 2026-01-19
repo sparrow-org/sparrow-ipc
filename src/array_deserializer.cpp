@@ -356,7 +356,6 @@ namespace sparrow_ipc
             std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
 
             std::span<const uint8_t> validity_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
-            const auto [bitmap_ptr, null_count] = utils::get_bitmap_pointer_and_null_count(validity_buffer_span, length);
 
             if (compression)
             {
@@ -396,6 +395,13 @@ namespace sparrow_ipc
             );
 
             const std::string format = "+w:" + std::to_string(list_size);
+            const auto null_count = std::visit(
+                [length](const auto& arg) {
+                    std::span<const uint8_t> span(arg.data(), arg.size());
+                    return utils::get_bitmap_pointer_and_null_count(span, length).second;
+                },
+                buffers[0]
+            );
 
             auto [child_arrow_array, child_arrow_schema] = sparrow::extract_arrow_structures(std::move(child_array));
 
@@ -448,7 +454,6 @@ namespace sparrow_ipc
             std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
 
             std::span<const uint8_t> validity_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
-            const auto [bitmap_ptr, null_count] = utils::get_bitmap_pointer_and_null_count(validity_buffer_span, length);
             if (compression)
             {
                 buffers.push_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
@@ -511,6 +516,14 @@ namespace sparrow_ipc
                 nullptr
             );
 
+            const auto null_count = std::visit(
+                [length](const auto& arg) {
+                    std::span<const uint8_t> span(arg.data(), arg.size());
+                    return utils::get_bitmap_pointer_and_null_count(span, length).second;
+                },
+                buffers[0]
+            );
+
             ArrowArray array = make_arrow_array<arrow_array_private_data>(
                 length,
                 null_count,
@@ -569,6 +582,7 @@ namespace sparrow_ipc
         size_t& variadic_counts_idx,
         const org::apache::arrow::flatbuf::Field& field)
     {
+        // TODO handle the keyssorted in flags (needs a custom test) when true
         return sparrow::array(array_deserializer::deserialize_list_array<sparrow::map_array>(
             record_batch,
             body,

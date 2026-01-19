@@ -83,6 +83,36 @@ nlohmann::json load_json_file(const std::filesystem::path& json_path)
     return nlohmann::json::parse(json_file);
 }
 
+void compare_layouts(const sparrow::array& arr1, const sparrow::array& arr2)
+{
+    const auto& proxy1 = sparrow::detail::array_access::get_arrow_proxy(arr1);
+    const auto& proxy2 = sparrow::detail::array_access::get_arrow_proxy(arr2);
+
+    // Compare basic properties
+    REQUIRE_EQ(proxy1.format(), proxy2.format());
+    REQUIRE_EQ(proxy1.length(), proxy2.length());
+    // TODO add name() ? metadata ?
+    if (!proxy1.name().has_value())
+    {
+        CHECK(!proxy2.name().has_value());
+    }
+
+    REQUIRE_EQ(proxy1.null_count(), proxy2.null_count());
+    REQUIRE_EQ(proxy1.offset(), proxy2.offset());
+    REQUIRE_EQ(proxy1.n_buffers(), proxy2.n_buffers());
+    REQUIRE_EQ(proxy1.n_children(), proxy2.n_children());
+    REQUIRE_EQ(proxy1.flags(), proxy2.flags());
+
+    // Recursively compare children
+    std::vector<sparrow::array> children1(arr1.children().begin(), arr1.children().end());
+    std::vector<sparrow::array> children2(arr2.children().begin(), arr2.children().end());
+    REQUIRE_EQ(children1.size(), children2.size());
+    for (size_t i = 0; i < children1.size(); ++i)
+    {
+        compare_layouts(children1[i], children2[i]);
+    }
+}
+
 void compare_record_batches(
     const std::vector<sparrow::record_batch>& record_batches_1,
     const std::vector<sparrow::record_batch>& record_batches_2
@@ -99,6 +129,9 @@ void compare_record_batches(
             REQUIRE_EQ(column_1.data_type(), column_2.data_type());
             REQUIRE_EQ(column_1.size(), column_2.size());
             CHECK_EQ(record_batches_1[i].names()[y], record_batches_2[i].names()[y]);
+
+            compare_layouts(column_1, column_2);
+
             for (size_t z = 0; z < column_1.size(); z++)
             {
                 INFO("Comparing batch " << i << ", column " << y << " named :" << col_name << " , row " << z);
@@ -355,6 +388,9 @@ TEST_SUITE("Integration tests")
             }
         }
     }
+
+    // TODO Add compression tests for record_batches_from_json and deserialized_serialized_data
+
 
     TEST_CASE_TEMPLATE(
         "Round trip of classic test files serialization/deserialization using compression",

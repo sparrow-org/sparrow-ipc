@@ -163,6 +163,7 @@ namespace sparrow_ipc
 
             const auto compression = record_batch.compression();
             std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
+            buffers.reserve(2);
 
             auto validity_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
             auto offsets_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
@@ -170,25 +171,16 @@ namespace sparrow_ipc
             using offset_type = typename T::offset_type;
             int64_t child_length;
 
-            const auto* offsets_ptr = reinterpret_cast<const offset_type*>(offsets_buffer_span.data());
-
             if (compression)
             {
                 auto processed_offsets = utils::get_decompressed_buffer(offsets_buffer_span, compression);
-                const offset_type* offsets_ptr = nullptr;
-                if (const auto* buf_ptr = std::get_if<sparrow::buffer<uint8_t>>(&processed_offsets))
-                {
-                    offsets_ptr = reinterpret_cast<const offset_type*>(buf_ptr->data());
-                }
-                else if (const auto* span_ptr = std::get_if<std::span<const uint8_t>>(&processed_offsets))
-                {
-                    offsets_ptr = reinterpret_cast<const offset_type*>(span_ptr->data());
-                }
-                else
-                {
-                    throw std::runtime_error("Could not get offsets pointer after decompression.");
-                }
-                child_length = offsets_ptr[length];
+                child_length = std::visit(
+                    [length](const auto& arg) -> int64_t {
+                        const auto* offsets_ptr = reinterpret_cast<const offset_type*>(arg.data());
+                        return offsets_ptr[length];
+                    },
+                    processed_offsets
+                );
 
                 buffers.push_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
                 buffers.push_back(std::move(processed_offsets));
@@ -201,6 +193,14 @@ namespace sparrow_ipc
                 buffers.emplace_back(validity_buffer_span);
                 buffers.emplace_back(offsets_buffer_span);
             }
+
+            const auto null_count = std::visit(
+                [length](const auto& arg) {
+                    std::span<const uint8_t> span(arg.data(), arg.size());
+                    return utils::get_bitmap_pointer_and_null_count(span, length).second;
+                },
+                buffers[0]
+            );
 
             // Deserialize child array
             const auto* child_field = field.children()->Get(0);
@@ -242,8 +242,6 @@ namespace sparrow_ipc
                 schema_children,
                 nullptr
             );
-
-            const auto [bitmap_ptr, null_count] = utils::get_bitmap_pointer_and_null_count(validity_buffer_span, length);
 
             auto** array_children = new ArrowArray*[1];
             array_children[0] = new ArrowArray(std::move(child_arrow_array));

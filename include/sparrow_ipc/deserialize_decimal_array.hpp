@@ -53,6 +53,7 @@ namespace sparrow_ipc
 
         const auto compression = record_batch.compression();
         std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
+        buffers.reserve(2);
 
         auto validity_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
         auto data_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
@@ -87,9 +88,12 @@ namespace sparrow_ipc
             buffers.emplace_back(std::move(data_buffer_copy));
         }
 
-        const auto [bitmap_ptr, null_count] = utils::get_bitmap_pointer_and_null_count(
-            validity_buffer_span,
-            length
+        const auto null_count = std::visit(
+            [length](const auto& arg) {
+                std::span<const uint8_t> span(arg.data(), arg.size());
+                return utils::get_bitmap_pointer_and_null_count(span, length).second;
+            },
+            buffers[0]
         );
 
         ArrowArray array = make_arrow_array<arrow_array_private_data>(
