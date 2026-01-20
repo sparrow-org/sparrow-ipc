@@ -26,7 +26,7 @@ namespace sparrow_ipc
         
         ArrowSchema schema = make_non_owning_arrow_schema(
             format,
-            name.data(),
+            name,
             metadata,
             flags,
             0,

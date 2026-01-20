@@ -113,7 +113,7 @@ TEST_SUITE("C Data Interface")
         {
             auto schema = sparrow_ipc::make_non_owning_arrow_schema(
                 "format",
-                nullptr,
+                "",
                 std::optional<std::vector<sparrow::metadata_pair>>{},
                 std::unordered_set<sparrow::ArrowFlag>{sparrow::ArrowFlag::DICTIONARY_ORDERED},
                 0,
@@ -121,10 +121,8 @@ TEST_SUITE("C Data Interface")
                 nullptr
             );
 
-            const auto schema_format = std::string_view(schema.format);
-            const bool format_eq = schema_format == "format";
-            CHECK(format_eq);
-            CHECK_EQ(schema.name, nullptr);
+            CHECK_EQ(std::string_view(schema.format), "format");
+            CHECK_EQ(std::string_view(schema.name), "");
             CHECK_EQ(schema.metadata, nullptr);
             CHECK_EQ(schema.flags, 1);
             CHECK_EQ(schema.n_children, 0);
@@ -169,7 +167,7 @@ TEST_SUITE("C Data Interface")
         {
             auto schema = sparrow_ipc::make_non_owning_arrow_schema(
                 "format",
-                nullptr,
+                "",
                 std::optional<std::vector<sparrow::metadata_pair>>{},
                 std::unordered_set<sparrow::ArrowFlag>{sparrow::ArrowFlag::DICTIONARY_ORDERED},
                 0,

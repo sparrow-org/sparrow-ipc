@@ -62,6 +62,10 @@ const std::vector<std::filesystem::path> files_paths_to_test_with_zstd_compressi
     tests_resources_files_path_with_compression / "generated_uncompressible_zstd",
 };
 
+constexpr std::string_view canonical_map_entries = "entries";
+constexpr std::string_view canonical_map_key = "key";
+constexpr std::string_view canonical_map_value = "value";
+
 size_t get_number_of_batches(const std::filesystem::path& json_path)
 {
     std::ifstream json_file(json_path);
@@ -83,7 +87,53 @@ nlohmann::json load_json_file(const std::filesystem::path& json_path)
     return nlohmann::json::parse(json_file);
 }
 
-void compare_layouts(const sparrow::array& arr1, const sparrow::array& arr2)
+void compare_names(
+    std::optional<std::string_view> opt_name1,
+    std::optional<std::string_view> opt_name2
+)
+{
+    if (!opt_name1.has_value())
+    {
+        CHECK_FALSE(opt_name2.has_value());
+    }
+    else
+    {
+        const auto& name1 = opt_name1.value();
+        const auto& name2 = opt_name2.value();
+
+        // When comparing Map types from different sources (JSON vs IPC streams), field names
+        // may differ even though the logical structure is identical. This is because:
+        //
+        // - Arrow spec recommends (but doesn't require) "entries"/"key"/"value" as field names
+        //    See: https://github.com/apache/arrow/blob/main/format/Schema.fbs#L127-L130
+        //
+        // - Different constructors and parsers may use different names:
+        //    - MapType(entries_type, {key_type, val_type}) uses canonical "entries"/key"/"value"
+        //    - JSON schemas may specify custom names like "some_entries"/"some_key"/"some_value"
+        //    See:
+        //       https://github.com/apache/arrow-testing/blob/master/data/arrow-ipc-stream/integration/cpp-21.0.0/generated_map_non_canonical.json.gz
+        //       https://github.com/apache/arrow/blob/main/cpp/src/arrow/type.cc#L1028-L1048
+        if (name1 != name2)
+        {
+            // Check if at least one name is a canonical map field name
+            const bool involves_canonical_name =
+                (name1 == canonical_map_entries || name2 == canonical_map_entries) ||
+                (name1 == canonical_map_key || name2 == canonical_map_key) ||
+                (name1 == canonical_map_value || name2 == canonical_map_value);
+
+            if (!involves_canonical_name)
+            {
+                // Both are non-canonical and different - this is an error
+                FAIL("Field name mismatch: '", name1, "' vs '", name2, "'");
+            }
+        }
+    }
+}
+
+void compare_layouts(
+    const sparrow::array& arr1,
+    const sparrow::array& arr2
+)
 {
     const auto& proxy1 = sparrow::detail::array_access::get_arrow_proxy(arr1);
     const auto& proxy2 = sparrow::detail::array_access::get_arrow_proxy(arr2);
@@ -91,21 +141,18 @@ void compare_layouts(const sparrow::array& arr1, const sparrow::array& arr2)
     // Compare basic properties
     REQUIRE_EQ(proxy1.format(), proxy2.format());
     REQUIRE_EQ(proxy1.length(), proxy2.length());
-    // TODO add name() ? metadata ?
-    if (!proxy1.name().has_value())
-    {
-        CHECK(!proxy2.name().has_value());
-    }
-
     REQUIRE_EQ(proxy1.null_count(), proxy2.null_count());
     REQUIRE_EQ(proxy1.offset(), proxy2.offset());
     REQUIRE_EQ(proxy1.n_buffers(), proxy2.n_buffers());
     REQUIRE_EQ(proxy1.n_children(), proxy2.n_children());
     REQUIRE_EQ(proxy1.flags(), proxy2.flags());
 
+    compare_names(proxy1.name(), proxy2.name());
+    // TODO compare metadata
+
     // Recursively compare children
-    std::vector<sparrow::array> children1(arr1.children().begin(), arr1.children().end());
-    std::vector<sparrow::array> children2(arr2.children().begin(), arr2.children().end());
+    const auto& children1 = arr1.children();
+    const auto& children2 = arr2.children();
     REQUIRE_EQ(children1.size(), children2.size());
     for (size_t i = 0; i < children1.size(); ++i)
     {
@@ -236,52 +283,7 @@ struct ZstdCompressionParams
 
 TEST_SUITE("Integration tests")
 {
-    TEST_CASE("Compare stream deserialization with JSON deserialization")
-    {
-        for (const auto& file_path : files_paths_to_test)
-        {
-            std::filesystem::path json_path = file_path;
-            json_path.replace_extension(".json");
-            const std::string test_name = "Testing " + file_path.filename().string();
-            SUBCASE(test_name.c_str())
-            {
-                // Load the JSON file
-                auto json_data = load_json_file(json_path);
-                CHECK(json_data != nullptr);
-
-                const size_t num_batches = get_number_of_batches(json_path);
-
-                std::vector<sparrow::record_batch> record_batches_from_json;
-
-                for (size_t batch_idx = 0; batch_idx < num_batches; ++batch_idx)
-                {
-                    INFO("Processing batch " << batch_idx << " of " << num_batches);
-                    record_batches_from_json.emplace_back(
-                        sparrow::json_reader::build_record_batch_from_json(json_data, batch_idx)
-                    );
-                }
-
-                // Load stream file
-                std::filesystem::path stream_file_path = file_path;
-                stream_file_path.replace_extension(".stream");
-                std::ifstream stream_file(stream_file_path, std::ios::in | std::ios::binary);
-                REQUIRE(stream_file.is_open());
-                const std::vector<uint8_t> stream_data(
-                    (std::istreambuf_iterator<char>(stream_file)),
-                    (std::istreambuf_iterator<char>())
-                );
-                stream_file.close();
-
-                // Process the stream file
-                const auto record_batches_from_stream = sparrow_ipc::deserialize_stream(
-                    std::span<const uint8_t>(stream_data)
-                );
-                compare_record_batches(record_batches_from_json, record_batches_from_stream);
-            }
-        }
-    }
-
-    TEST_CASE("Compare record_batch serialization with stream file")
+    TEST_CASE("Record batch equivalence across JSON and IPC streams")
     {
         for (const auto& file_path : files_paths_to_test)
         {
@@ -327,13 +329,21 @@ TEST_SUITE("Integration tests")
                 const auto deserialized_serialized_data = sparrow_ipc::deserialize_stream(
                     std::span<const uint8_t>(serialized_data)
                 );
-                compare_record_batches(record_batches_from_stream, deserialized_serialized_data);
+
+                SUBCASE("Compare stream with JSON deserialization")
+                {
+                    compare_record_batches(record_batches_from_json, record_batches_from_stream);
+                }
+                SUBCASE("Compare record_batch de_serialization with stream deserialization")
+                {
+                    compare_record_batches(record_batches_from_stream, deserialized_serialized_data);
+                }
             }
         }
     }
 
     TEST_CASE_TEMPLATE(
-        "Compare record_batch serialization with stream file using compression",
+        "Record batch equivalence across JSON and IPC streams - compressed",
         T,
         Lz4CompressionParams,
         ZstdCompressionParams
@@ -384,13 +394,17 @@ TEST_SUITE("Integration tests")
                 const auto deserialized_serialized_data = sparrow_ipc::deserialize_stream(
                     std::span<const uint8_t>(serialized_data)
                 );
-                compare_record_batches(record_batches_from_stream, deserialized_serialized_data);
+                SUBCASE("Compare stream with JSON deserialization - compressed")
+                {
+                    compare_record_batches(record_batches_from_json, record_batches_from_stream);
+                }
+                SUBCASE("Compare record_batch de_serialization with stream deserialization - compressed")
+                {
+                    compare_record_batches(record_batches_from_stream, deserialized_serialized_data);
+                }
             }
         }
     }
-
-    // TODO Add compression tests for record_batches_from_json and deserialized_serialized_data
-
 
     TEST_CASE_TEMPLATE(
         "Round trip of classic test files serialization/deserialization using compression",
@@ -446,7 +460,14 @@ TEST_SUITE("Integration tests")
             );
 
             // Compare
-            compare_record_batches(record_batches_from_stream, deserialized_serialized_data);
+            SUBCASE("Compare stream with JSON deserialization using compression")
+            {
+                compare_record_batches(record_batches_from_json, record_batches_from_stream);
+            }
+            SUBCASE("Compare record_batch de_serialization with stream deserialization using compression")
+            {
+                compare_record_batches(record_batches_from_stream, deserialized_serialized_data);
+            }
         }
     }
 }

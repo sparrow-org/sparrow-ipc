@@ -18,7 +18,7 @@ namespace sparrow_ipc
     void fill_non_owning_arrow_schema(
         ArrowSchema& schema,
         std::string_view format,
-        const char* name,
+        std::string_view name,
         std::optional<M> metadata,
         std::optional<std::unordered_set<sparrow::ArrowFlag>> flags,
         size_t children_count,
@@ -56,7 +56,7 @@ namespace sparrow_ipc
     template <sparrow::input_metadata_container M = std::vector<sparrow::metadata_pair>>
     [[nodiscard]] ArrowSchema make_non_owning_arrow_schema(
         std::string_view format,
-        const char* name,
+        std::string_view name,
         std::optional<M> metadata,
         std::optional<std::unordered_set<sparrow::ArrowFlag>> flags,
         size_t children_count,

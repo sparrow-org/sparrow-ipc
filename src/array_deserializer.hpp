@@ -235,7 +235,7 @@ namespace sparrow_ipc
             schema_children[0] = new ArrowSchema(std::move(child_arrow_schema));
             ArrowSchema schema = make_non_owning_arrow_schema(
                 format,
-                name.data(),
+                name,
                 metadata,
                 flags,
                 1, // one child

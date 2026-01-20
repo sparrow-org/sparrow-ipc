@@ -29,7 +29,7 @@ namespace sparrow_ipc
             flags = std::unordered_set<sparrow::ArrowFlag>{sparrow::ArrowFlag::NULLABLE};
         }
 
-        ArrowSchema schema = make_non_owning_arrow_schema(format, name.data(), metadata, flags, 0, nullptr, nullptr);
+        ArrowSchema schema = make_non_owning_arrow_schema(format, name, metadata, flags, 0, nullptr, nullptr);
         std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
         ArrowArray array = make_arrow_array<arrow_array_private_data>(
             length,

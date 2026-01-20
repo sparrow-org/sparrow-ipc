@@ -4,7 +4,7 @@ namespace sparrow_ipc
 {
     non_owning_arrow_schema_private_data::non_owning_arrow_schema_private_data(
         std::string_view format,
-        const char* name,
+        std::string_view name,
         std::optional<std::string> metadata
     )
         : m_format(format)
@@ -20,7 +20,7 @@ namespace sparrow_ipc
 
     const char* non_owning_arrow_schema_private_data::name_ptr() const noexcept
     {
-        return m_name;
+        return m_name.data();
     }
 
     const char* non_owning_arrow_schema_private_data::metadata_ptr() const noexcept

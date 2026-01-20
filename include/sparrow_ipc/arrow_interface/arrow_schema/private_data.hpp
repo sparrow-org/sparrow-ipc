@@ -15,7 +15,7 @@ namespace sparrow_ipc
 
         SPARROW_IPC_API non_owning_arrow_schema_private_data(
             std::string_view format,
-            const char* name,
+            std::string_view name,
             std::optional<std::string> metadata
         );
 
@@ -26,7 +26,7 @@ namespace sparrow_ipc
     private:
 
         std::string m_format;
-        const char* m_name;
+        std::string m_name;
         std::optional<std::string> m_metadata;
     };
 }
