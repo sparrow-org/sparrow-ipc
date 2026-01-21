@@ -101,7 +101,7 @@ void compare_names(
         const auto& name1 = opt_name1.value();
         const auto& name2 = opt_name2.value();
 
-        // When comparing Map types from different sources (JSON vs IPC streams), field names
+        // NOTE When comparing Map types from different sources (JSON vs IPC streams), field names
         // may differ even though the logical structure is identical. This is because:
         //
         // - Arrow spec recommends (but doesn't require) "entries"/"key"/"value" as field names
@@ -115,16 +115,54 @@ void compare_names(
         //       https://github.com/apache/arrow/blob/main/cpp/src/arrow/type.cc#L1028-L1048
         if (name1 != name2)
         {
-            // Check if at least one name is a canonical map field name
-            const bool involves_canonical_name =
-                (name1 == canonical_map_entries || name2 == canonical_map_entries) ||
-                (name1 == canonical_map_key || name2 == canonical_map_key) ||
-                (name1 == canonical_map_value || name2 == canonical_map_value);
-
-            if (!involves_canonical_name)
+            const auto is_canonical = [](std::string_view s)
             {
-                // Both are non-canonical and different - this is an error
+                return s == canonical_map_entries || s == canonical_map_key || s == canonical_map_value;
+            };
+
+            if (is_canonical(name1) == is_canonical(name2))
+            {
+                // If both are canonical but different (e.g. "key" vs "value"), or
+                // if both are non-canonical and different, it's an error.
                 FAIL("Field name mismatch: '", name1, "' vs '", name2, "'");
+            }
+            // Otherwise, one is canonical and one is not. We allow this for maps.
+        }
+    }
+}
+
+void compare_raw_buffers(const sparrow::arrow_proxy& proxy1, const sparrow::arrow_proxy& proxy2)
+{
+    const auto& buffers1 = proxy1.buffers();
+    const auto& buffers2 = proxy2.buffers();
+    for (size_t i = 0; i < buffers1.size(); ++i)
+    {
+        const auto& buf1 = buffers1[i];
+        const auto& buf2 = buffers2[i];
+
+        // NOTE: The validity buffer (buffer 0) may be omitted when null_count is 0.
+        // One implementation might provide an empty buffer while another provides
+        // a valid buffer filled with all 1s. Both representations are equivalent.
+        // Case in decimal array
+        if (i == 0 && proxy1.null_count() == 0)
+        {
+            if (buf1.size() == 0 || buf2.size() == 0)
+            {
+                continue;
+            }
+        }
+
+        REQUIRE_EQ(buf1.size(), buf2.size());
+
+        if (buf1.size() > 0)
+        {
+            // NOTE: Timestamp arrays with timezone cannot be compared byte-for-byte
+            // because different implementations may store timezone info differently
+            // (e.g., as metadata vs. embedded in values like json reader). The actual timestamp values
+            // are compared semantically in `compare_record_batches` instead.
+            if (!proxy1.format().starts_with("ts"))
+            {
+                CHECK_EQ(std::memcmp(buf1.data(), buf2.data(), buf1.size()), 0);
             }
         }
     }
@@ -149,6 +187,9 @@ void compare_layouts(
 
     compare_names(proxy1.name(), proxy2.name());
     // TODO compare metadata
+
+    // Compare all buffers byte-for-byte
+    compare_raw_buffers(proxy1, proxy2);
 
     // Recursively compare children
     const auto& children1 = arr1.children();
