@@ -95,39 +95,69 @@ void compare_names(
     if (!opt_name1.has_value())
     {
         CHECK_FALSE(opt_name2.has_value());
+        return;
     }
-    else
+
+    REQUIRE(opt_name2.has_value());
+
+    const auto& name1 = opt_name1.value();
+    const auto& name2 = opt_name2.value();
+
+    // NOTE When comparing Map types from different sources (JSON vs IPC streams), field names
+    // may differ even though the logical structure is identical. This is because:
+    //
+    // - Arrow spec recommends (but doesn't require) "entries"/"key"/"value" as field names
+    //    See: https://github.com/apache/arrow/blob/main/format/Schema.fbs#L127-L130
+    //
+    // - Different constructors and parsers may use different names:
+    //    - MapType(entries_type, {key_type, val_type}) uses canonical "entries"/key"/"value"
+    //    - JSON schemas may specify custom names like "some_entries"/"some_key"/"some_value"
+    //    See:
+    //       https://github.com/apache/arrow-testing/blob/master/data/arrow-ipc-stream/integration/cpp-21.0.0/generated_map_non_canonical.json.gz
+    //       https://github.com/apache/arrow/blob/main/cpp/src/arrow/type.cc#L1028-L1048
+    if (name1 != name2)
     {
-        const auto& name1 = opt_name1.value();
-        const auto& name2 = opt_name2.value();
-
-        // NOTE When comparing Map types from different sources (JSON vs IPC streams), field names
-        // may differ even though the logical structure is identical. This is because:
-        //
-        // - Arrow spec recommends (but doesn't require) "entries"/"key"/"value" as field names
-        //    See: https://github.com/apache/arrow/blob/main/format/Schema.fbs#L127-L130
-        //
-        // - Different constructors and parsers may use different names:
-        //    - MapType(entries_type, {key_type, val_type}) uses canonical "entries"/key"/"value"
-        //    - JSON schemas may specify custom names like "some_entries"/"some_key"/"some_value"
-        //    See:
-        //       https://github.com/apache/arrow-testing/blob/master/data/arrow-ipc-stream/integration/cpp-21.0.0/generated_map_non_canonical.json.gz
-        //       https://github.com/apache/arrow/blob/main/cpp/src/arrow/type.cc#L1028-L1048
-        if (name1 != name2)
+        const auto is_canonical = [](std::string_view s)
         {
-            const auto is_canonical = [](std::string_view s)
-            {
-                return s == canonical_map_entries || s == canonical_map_key || s == canonical_map_value;
-            };
+            return s == canonical_map_entries || s == canonical_map_key || s == canonical_map_value;
+        };
 
-            if (is_canonical(name1) == is_canonical(name2))
-            {
-                // If both are canonical but different (e.g. "key" vs "value"), or
-                // if both are non-canonical and different, it's an error.
-                FAIL("Field name mismatch: '", name1, "' vs '", name2, "'");
-            }
-            // Otherwise, one is canonical and one is not. We allow this for maps.
+        if (is_canonical(name1) == is_canonical(name2))
+        {
+            // If both are canonical but different (e.g. "key" vs "value"), or
+            // if both are non-canonical and different, it's an error.
+            FAIL("Field name mismatch: '", name1, "' vs '", name2, "'");
         }
+        // Otherwise, one is canonical and one is not. We allow this for maps.
+    }
+}
+
+void compare_metadata(const sparrow::arrow_proxy& proxy1, const sparrow::arrow_proxy& proxy2)
+{
+    const auto& opt_metadata1 = proxy1.metadata();
+    const auto& opt_metadata2 = proxy2.metadata();
+
+    const bool meta1_is_present = opt_metadata1.has_value() && !opt_metadata1->empty();
+    const bool meta2_is_present = opt_metadata2.has_value() && !opt_metadata2->empty();
+
+    if (!meta1_is_present)
+    {
+        CHECK_FALSE(meta2_is_present);
+        return;
+    }
+
+    REQUIRE(meta2_is_present);
+
+    const auto& metadata1 = opt_metadata1.value();
+    const auto& metadata2 = opt_metadata2.value();
+
+    REQUIRE_EQ(metadata1.size(), metadata2.size());
+
+    auto it1 = metadata1.cbegin();
+    auto it2 = metadata2.cbegin();
+    for (; it1 != metadata1.cend(); ++it1, ++it2)
+    {
+        CHECK_EQ(*it1, *it2);
     }
 }
 
@@ -186,7 +216,7 @@ void compare_layouts(
     REQUIRE_EQ(proxy1.flags(), proxy2.flags());
 
     compare_names(proxy1.name(), proxy2.name());
-    // TODO compare metadata
+    compare_metadata(proxy1, proxy2);
 
     // Compare all buffers byte-for-byte
     compare_raw_buffers(proxy1, proxy2);
