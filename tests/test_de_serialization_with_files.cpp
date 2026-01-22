@@ -1,7 +1,10 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <stdexcept>
+#include <string_view>
+#include <unordered_set>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -13,6 +16,7 @@
 
 #include "doctest/doctest.h"
 #include "sparrow.hpp"
+
 #include "sparrow_ipc/deserialize.hpp"
 #include "sparrow_ipc/memory_output_stream.hpp"
 #include "sparrow_ipc/serializer.hpp"
@@ -132,6 +136,64 @@ void compare_names(
     }
 }
 
+bool are_timezones_equivalent(std::string_view tz1, std::string_view tz2)
+{
+    if (tz1 == tz2)
+    {
+        return true;
+    }
+
+    // Groups of equivalent timezones
+    static const std::vector<std::unordered_set<std::string_view>> tz_groups = {
+        {"UTC", "Etc/UTC"},
+        {"US/Eastern", "America/New_York"},
+        {"US/Pacific", "America/Los_Angeles"},
+    };
+
+    for (const auto& group : tz_groups)
+    {
+        if (group.count(tz1) && group.count(tz2))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void compare_formats(std::string_view format1, std::string_view format2)
+{
+    if (format1 == format2)
+    {
+        return;
+    }
+
+    // This is checking the equivalent timezones used with Timestamp arrays
+    if (format1.starts_with("ts") && format2.starts_with("ts"))
+    {
+        // Find the last colon, the timezone is after it.
+        auto last_colon1 = format1.find_last_of(':');
+        auto last_colon2 = format2.find_last_of(':');
+
+        if (last_colon1 == last_colon2 && last_colon1 != std::string_view::npos)
+        {
+            if (std::equal(format1.begin(), format1.begin() + last_colon1,
+                format2.begin()))
+            {
+                std::string_view tz1 = format1.substr(last_colon1 + 1);
+                std::string_view tz2 = format2.substr(last_colon2 + 1);
+
+                if (are_timezones_equivalent(tz1, tz2))
+                {
+                    return; // They are equivalent aliases
+                }
+            }
+        }
+    }
+
+    REQUIRE_EQ(format1, format2);
+}
+
 void compare_metadata(const sparrow::arrow_proxy& proxy1, const sparrow::arrow_proxy& proxy2)
 {
     const auto& opt_metadata1 = proxy1.metadata();
@@ -207,7 +269,6 @@ void compare_layouts(
     const auto& proxy2 = sparrow::detail::array_access::get_arrow_proxy(arr2);
 
     // Compare basic properties
-    REQUIRE_EQ(proxy1.format(), proxy2.format());
     REQUIRE_EQ(proxy1.length(), proxy2.length());
     REQUIRE_EQ(proxy1.null_count(), proxy2.null_count());
     REQUIRE_EQ(proxy1.offset(), proxy2.offset());
@@ -216,6 +277,7 @@ void compare_layouts(
     REQUIRE_EQ(proxy1.flags(), proxy2.flags());
 
     compare_names(proxy1.name(), proxy2.name());
+    compare_formats(proxy1.format(), proxy2.format());
     compare_metadata(proxy1, proxy2);
 
     // Compare all buffers byte-for-byte
