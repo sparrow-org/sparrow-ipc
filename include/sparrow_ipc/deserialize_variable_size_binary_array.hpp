@@ -45,23 +45,26 @@ namespace sparrow_ipc
 
         const auto compression = record_batch.compression();
         std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
-        buffers.reserve(3);
+        constexpr auto nb_buffers = 3;
+        buffers.reserve(nb_buffers);
 
-        auto validity_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
-        auto offset_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
-        auto data_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
+        {
+            auto validity_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
+            auto offset_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
+            auto data_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
 
-        if (compression)
-        {
-            buffers.push_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
-            buffers.push_back(utils::get_decompressed_buffer(offset_buffer_span, compression));
-            buffers.push_back(utils::get_decompressed_buffer(data_buffer_span, compression));
-        }
-        else
-        {
-            buffers.push_back(validity_buffer_span);
-            buffers.push_back(offset_buffer_span);
-            buffers.push_back(data_buffer_span);
+            if (compression)
+            {
+                buffers.push_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
+                buffers.push_back(utils::get_decompressed_buffer(offset_buffer_span, compression));
+                buffers.push_back(utils::get_decompressed_buffer(data_buffer_span, compression));
+            }
+            else
+            {
+                buffers.push_back(std::move(validity_buffer_span));
+                buffers.push_back(std::move(offset_buffer_span));
+                buffers.push_back(std::move(data_buffer_span));
+            }
         }
 
         const auto null_count = std::visit(

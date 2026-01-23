@@ -70,20 +70,22 @@ namespace sparrow_ipc::detail
 
         const auto compression = record_batch.compression();
         std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
-        buffers.reserve(2);
-
-        auto validity_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
-        auto data_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
-
-        if (compression)
+        constexpr auto nb_buffers = 2;
+        buffers.reserve(nb_buffers);
         {
-            buffers.push_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
-            buffers.push_back(utils::get_decompressed_buffer(data_buffer_span, compression));
-        }
-        else
-        {
-            buffers.emplace_back(validity_buffer_span);
-            buffers.emplace_back(data_buffer_span);
+            auto validity_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
+            auto data_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
+
+            if (compression)
+            {
+                buffers.push_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
+                buffers.push_back(utils::get_decompressed_buffer(data_buffer_span, compression));
+            }
+            else
+            {
+                buffers.push_back(std::move(validity_buffer_span));
+                buffers.push_back(std::move(data_buffer_span));
+            }
         }
 
         const auto null_count = std::visit(

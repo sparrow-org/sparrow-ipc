@@ -355,15 +355,17 @@ namespace sparrow_ipc
             const auto compression = record_batch.compression();
             std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
 
-            std::span<const uint8_t> validity_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
+            {
+                std::span<const uint8_t> validity_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
 
-            if (compression)
-            {
-                buffers.push_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
-            }
-            else
-            {
-                buffers.emplace_back(validity_buffer_span);
+                if (compression)
+                {
+                    buffers.push_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
+                }
+                else
+                {
+                    buffers.push_back(std::move(validity_buffer_span));
+                }
             }
 
             const auto* child_field = field.children()->Get(0);
@@ -453,14 +455,16 @@ namespace sparrow_ipc
             const auto compression = record_batch.compression();
             std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
 
-            std::span<const uint8_t> validity_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
-            if (compression)
             {
-                buffers.push_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
-            }
-            else
-            {
-                buffers.emplace_back(validity_buffer_span);
+                std::span<const uint8_t> validity_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
+                if (compression)
+                {
+                    buffers.push_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
+                }
+                else
+                {
+                    buffers.push_back(std::move(validity_buffer_span));
+                }
             }
 
             std::vector<sparrow::array> child_arrays;

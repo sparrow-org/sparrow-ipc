@@ -163,7 +163,8 @@ namespace sparrow_ipc
 
             const auto compression = record_batch.compression();
             std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
-            buffers.reserve(2);
+            constexpr auto nb_buffers = 2;
+            buffers.reserve(nb_buffers);
 
             auto validity_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
             auto offsets_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
@@ -190,8 +191,8 @@ namespace sparrow_ipc
                 const auto offsets = reinterpret_cast<const offset_type*>(offsets_buffer_span.data());
                 child_length = offsets[length];
 
-                buffers.emplace_back(validity_buffer_span);
-                buffers.emplace_back(offsets_buffer_span);
+                buffers.push_back(std::move(validity_buffer_span));
+                buffers.push_back(std::move(offsets_buffer_span));
             }
 
             const auto null_count = std::visit(

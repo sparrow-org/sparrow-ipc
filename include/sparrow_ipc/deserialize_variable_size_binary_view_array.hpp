@@ -60,20 +60,23 @@ namespace sparrow_ipc
 
         const auto compression = record_batch.compression();
         std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
-        buffers.reserve(data_buffers_size + 3);
+        const auto nb_buffers = data_buffers_size + 3;
+        buffers.reserve(nb_buffers);
 
-        auto validity_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
-        auto views_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
+        {
+            auto validity_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
+            auto views_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
 
-        if (compression)
-        {
-            buffers.push_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
-            buffers.push_back(utils::get_decompressed_buffer(views_buffer_span, compression));
-        }
-        else
-        {
-            buffers.push_back(validity_buffer_span);
-            buffers.push_back(views_buffer_span);
+            if (compression)
+            {
+                buffers.push_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
+                buffers.push_back(utils::get_decompressed_buffer(views_buffer_span, compression));
+            }
+            else
+            {
+                buffers.push_back(std::move(validity_buffer_span));
+                buffers.push_back(std::move(views_buffer_span));
+            }
         }
 
         std::vector<int64_t> variadic_buffer_sizes;
