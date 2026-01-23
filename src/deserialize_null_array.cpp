@@ -18,7 +18,7 @@ namespace sparrow_ipc
         size_t&
     )
     {
-        const std::string_view format = data_type_to_format(
+        const std::string_view format = sparrow::data_type_to_format(
             sparrow::detail::get_data_type_from_array<sparrow::null_array>::get()
         );
 

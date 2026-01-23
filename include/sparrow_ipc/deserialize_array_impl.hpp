@@ -49,7 +49,7 @@ namespace sparrow_ipc::detail
     {
         const std::string_view format = format_override.has_value()
             ? *format_override
-            : data_type_to_format(sparrow::detail::get_data_type_from_array<ArrayType<T>>::get());
+            : sparrow::data_type_to_format(sparrow::detail::get_data_type_from_array<ArrayType<T>>::get());
         
         // Set up flags based on nullable
         std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;

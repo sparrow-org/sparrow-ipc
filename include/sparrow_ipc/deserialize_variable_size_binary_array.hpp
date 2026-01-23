@@ -24,7 +24,7 @@ namespace sparrow_ipc
         size_t& buffer_index
     )
     {
-        const std::string_view format = data_type_to_format(sparrow::detail::get_data_type_from_array<T>::get());
+        const std::string_view format = sparrow::data_type_to_format(sparrow::detail::get_data_type_from_array<T>::get());
         
         // Set up flags based on nullable
         std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;

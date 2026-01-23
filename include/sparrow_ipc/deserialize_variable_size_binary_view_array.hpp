@@ -25,21 +25,7 @@ namespace sparrow_ipc
         const int64_t data_buffers_size
     )
     {
-        // TODO Use the commented line below instead of the following snippet when this is handled/added in sparrow
-        // const std::string_view format = data_type_to_format(sparrow::detail::get_data_type_from_array<T>::get());
-        std::string format;
-        if (sparrow::detail::get_data_type_from_array<T>::get() == sparrow::data_type::STRING_VIEW)
-        {
-            format = "vu";
-        }
-        else if (sparrow::detail::get_data_type_from_array<T>::get() == sparrow::data_type::BINARY_VIEW)
-        {
-            format = "vz";
-        }
-        else
-        {
-            throw std::runtime_error("Unsupported view type");
-        }
+        const std::string_view format = sparrow::data_type_to_format(sparrow::detail::get_data_type_from_array<T>::get());
 
         // Set up flags based on nullable
         std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;

@@ -494,7 +494,7 @@ namespace sparrow_ipc
                 ));
             }
 
-            const std::string_view format = data_type_to_format(sparrow::detail::get_data_type_from_array<sparrow::struct_array>::get());
+            const std::string_view format = sparrow::data_type_to_format(sparrow::detail::get_data_type_from_array<sparrow::struct_array>::get());
 
             const size_t n_child_arrays = child_arrays.size();
 

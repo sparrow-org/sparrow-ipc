@@ -52,7 +52,7 @@ namespace sparrow_ipc
         const std::string& timezone
     )
     {
-        std::string format = std::string(data_type_to_format(
+        std::string format = std::string(sparrow::data_type_to_format(
             sparrow::detail::get_data_type_from_array<sparrow::timestamp_array<T>>::get()
         )) + timezone;
 
