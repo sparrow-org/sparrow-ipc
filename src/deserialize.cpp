@@ -51,6 +51,7 @@ namespace sparrow_ipc
         size_t field_idx = 0;
         size_t buffer_index = 0;
         size_t variadic_counts_idx = 0;
+        size_t field_node_index = 0;
         for (const auto field : *(schema.fields()))
         {
             if (!field)
@@ -71,6 +72,7 @@ namespace sparrow_ipc
                 nullable,
                 buffer_index,
                 variadic_counts_idx,
+                field_node_index,
                 *field
             ));
         }
