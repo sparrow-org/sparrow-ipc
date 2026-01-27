@@ -9,6 +9,7 @@
 #include "sparrow_ipc/deserialize_fixed_size_binary_array.hpp"
 #include "sparrow_ipc/deserialize_interval_array.hpp"
 #include "sparrow_ipc/deserialize_null_array.hpp"
+#include "sparrow_ipc/deserialize_run_end_encoded_array.hpp"
 #include "sparrow_ipc/deserialize_time_related_arrays.hpp"
 
 namespace sparrow_ipc
@@ -46,6 +47,7 @@ namespace sparrow_ipc
         m_deserializer_map[org::apache::arrow::flatbuf::Type::FixedSizeList] = &deserialize_fixed_size_list;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Struct_] = &deserialize_struct;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Map] = &deserialize_map;
+        m_deserializer_map[org::apache::arrow::flatbuf::Type::RunEndEncoded] = &deserialize_run_end_encoded;
     }
 
     sparrow::array array_deserializer::deserialize(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -598,5 +600,31 @@ namespace sparrow_ipc
             variadic_counts_idx,
             field
         ));
-}
+    }
+
+    sparrow::array array_deserializer::deserialize_run_end_encoded(
+        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+        const std::span<const uint8_t>& body,
+        const int64_t length,
+        const std::string& name,
+        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+        bool nullable,
+        size_t& buffer_index,
+        size_t& variadic_counts_idx,
+        const org::apache::arrow::flatbuf::Field& field)
+    {
+        static array_deserializer instance;
+        return sparrow::array(deserialize_run_end_encoded_array(
+            record_batch,
+            body,
+            length,
+            name,
+            metadata,
+            nullable,
+            buffer_index,
+            variadic_counts_idx,
+            field,
+            instance
+        ));
+    }
 }

@@ -406,5 +406,15 @@ namespace sparrow_ipc
                                               size_t& buffer_index,
                                               size_t& variadic_counts_idx,
                                               const org::apache::arrow::flatbuf::Field& field);
+
+        static sparrow::array deserialize_run_end_encoded(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+                                                          const std::span<const uint8_t>& body,
+                                                          const int64_t length,
+                                                          const std::string& name,
+                                                          const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+                                                          bool nullable,
+                                                          size_t& buffer_index,
+                                                          size_t& variadic_counts_idx,
+                                                          const org::apache::arrow::flatbuf::Field& field);
     };
 }
