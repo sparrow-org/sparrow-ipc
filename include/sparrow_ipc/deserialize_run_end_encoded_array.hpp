@@ -42,16 +42,6 @@ namespace sparrow_ipc
      * @param array_deserializer The deserializer to use for child arrays
      *
      * @return The deserialized run-end encoded array
-     * 
-     * @note KNOWN LIMITATION: This implementation may fail on zero-length run-end encoded arrays
-     *       due to missing or null buffer entries in the IPC format combined with sparrow's
-     *       buffer_view construction requirements. The workaround of inferring encoded_length 
-     *       from buffer sizes doesn't work when buffers are absent or have null pointers.
-     *       The proper solution requires threading node_index through all deserializers to 
-     *       access FieldNode.length values directly. This is a significant architectural change.
-     *       For non-zero length arrays, the implementation works correctly.
-     *       Users encountering zero-length arrays can filter them out before deserialization
-     *       as a workaround.
      */
     template <typename ArrayDeserializer>
     [[nodiscard]] sparrow::run_end_encoded_array deserialize_run_end_encoded_array(
@@ -84,33 +74,11 @@ namespace sparrow_ipc
             );
         }
 
-        // For a proper implementation, we need node indices to get the encoded length from FieldNodes.
-        // According to the Arrow IPC spec, FieldNode structs are in pre-ordered flattened order.
-        // For a run-end encoded array:
-        // - Node[i]: parent with decoded length
-        // - Node[i+1]: run_ends child with encoded length
-        // - Node[i+2]: values child with encoded length
-        // A complete solution would require threading node_index through all deserializers.
-        //
-        // As a workaround, we inspect the run_ends buffer to determine encoded length.
-        // This works because run_ends is always a primitive integer array.
-        
         const auto* run_ends_field = field.children()->Get(0);
         if (!run_ends_field)
         {
             throw std::runtime_error("Run-end encoded array field has null run ends child.");
         }
-
-        // IMPORTANT: Run-end encoded arrays have ZERO buffers at the parent level!
-        // All buffers belong to the children. So buffer_index currently points to where
-        // the first child's buffers start.
-        
-        // Get encoded_length directly from FieldNodes using node_index.
-        // According to the Arrow IPC spec, FieldNode structs are in pre-ordered flattened order.
-        // For a run-end encoded array:
-        // - Node[node_index-1]: parent with decoded length (already consumed above with ++node_index)
-        // - Node[node_index]: run_ends child with encoded length
-        // - Node[node_index+1]: values child with encoded length
         
         const auto* nodes = record_batch.nodes();
         if (!nodes || node_index >= nodes->size())
