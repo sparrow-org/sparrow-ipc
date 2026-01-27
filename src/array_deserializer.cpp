@@ -45,6 +45,8 @@ namespace sparrow_ipc
         m_deserializer_map[org::apache::arrow::flatbuf::Type::List] = &deserialize_list<sparrow::list_array>;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::LargeList] = &deserialize_list<sparrow::big_list_array>;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::FixedSizeList] = &deserialize_fixed_size_list;
+        m_deserializer_map[org::apache::arrow::flatbuf::Type::ListView] = &deserialize_list_view<sparrow::list_view_array>;
+        m_deserializer_map[org::apache::arrow::flatbuf::Type::LargeListView] = &deserialize_list_view<sparrow::big_list_view_array>;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Struct_] = &deserialize_struct;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Map] = &deserialize_map;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::RunEndEncoded] = &deserialize_run_end_encoded;

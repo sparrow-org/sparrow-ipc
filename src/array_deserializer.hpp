@@ -65,6 +65,7 @@ namespace sparrow_ipc
          * @param metadata The metadata associated with the field.
          * @param nullable Whether the field is nullable.
          * @param buffer_index The current index into the buffer list of the RecordBatch.
+         * @param node_index This index tracks the FieldNode being processed in the RecordBatch's depth-first traversal. It is advanced for each FieldNode consumed.
          * @param variadic_counts_idx The current index into the list of variadic buffers (used with view data types).
          * @param field The Flatbuffer Field object describing the array to deserialize.
          * @return A `sparrow::array` containing the deserialized data.
@@ -285,6 +286,177 @@ namespace sparrow_ipc
             const org::apache::arrow::flatbuf::Field& field)
         {
             return sparrow::array(deserialize_list_array<T>(
+                record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field
+            ));
+        }
+
+        template <typename T>
+        [[nodiscard]] static T deserialize_list_view_array(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field& field)
+        {
+            ++node_index;  // Consume one FieldNode for this list view array
+            // Set up flags based on nullable
+            std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
+            if (nullable)
+            {
+                flags = {sparrow::ArrowFlag::NULLABLE};
+            }
+
+            const int64_t child_length = [&] {
+                if (!record_batch.nodes() || node_index >= record_batch.nodes()->size())
+                {
+                    throw std::runtime_error(
+                        "Could not retrieve child length from FieldNode metadata. "
+                        "FieldNode not found at expected index."
+                    );
+                }
+                return record_batch.nodes()->Get(node_index)->length();
+            }();
+
+            const auto compression = record_batch.compression();
+
+            auto process_buffer = [&](auto&& buffer_span) {
+                return compression
+                    ? utils::get_decompressed_buffer(buffer_span, compression)
+                    : std::move(buffer_span);
+            };
+
+            // Process buffers
+            auto processed_validity = process_buffer(utils::get_buffer(record_batch, body, buffer_index));
+            auto processed_offsets  = process_buffer(utils::get_buffer(record_batch, body, buffer_index));
+            auto processed_sizes    = process_buffer(utils::get_buffer(record_batch, body, buffer_index));
+
+            {
+                using offset_type = typename T::offset_type;
+                using size_type = typename T::list_size_type;
+
+                auto get_buffer_data_ptr = [](const arrow_array_private_data::optionally_owned_buffer& buf) {
+                    return std::visit([](const auto& arg) { return arg.data(); }, buf);
+                };
+
+                const auto* offsets_ptr = reinterpret_cast<const offset_type*>(get_buffer_data_ptr(processed_offsets));
+                const auto* sizes_ptr = reinterpret_cast<const size_type*>(get_buffer_data_ptr(processed_sizes));
+
+                // Validate offsets + sizes
+                for (int64_t i = 0; i < length; ++i)
+                {
+                    const int64_t offset = static_cast<int64_t>(offsets_ptr[i]);
+                    const int64_t size   = static_cast<int64_t>(sizes_ptr[i]);
+
+                    if (offset < 0)
+                    {
+                        throw std::runtime_error("Negative offset detected in list view array.");
+                    }
+
+                    if (size < 0)
+                    {
+                        throw std::runtime_error("Negative size detected in list view array.");
+                    }
+
+                    if (offset > child_length || size > child_length - offset)
+                    {
+                        throw std::runtime_error(
+                            "Offset + size exceeds child length derived from metadata."
+                        );
+                    }
+                }
+            }
+
+            std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
+            constexpr auto nb_buffers = 3;
+            buffers.reserve(nb_buffers);
+
+            // Store buffers
+            buffers.push_back(std::move(processed_validity));
+            buffers.push_back(std::move(processed_offsets));
+            buffers.push_back(std::move(processed_sizes));
+
+            const auto null_count = std::visit(
+                [length](const auto& arg) {
+                    return utils::get_bitmap_pointer_and_null_count({arg.data(), arg.size()}, length).second;
+                },
+                buffers[0]
+            );
+
+            const auto* child_field = field.children()->Get(0);
+            if (!child_field)
+            {
+                throw std::runtime_error("List view array field has no child field.");
+            }
+
+            std::optional<std::vector<sparrow::metadata_pair>> child_metadata;
+            if (child_field->custom_metadata())
+            {
+                child_metadata = to_sparrow_metadata(*child_field->custom_metadata());
+            }
+
+            sparrow::array child_array = array_deserializer::deserialize(
+                record_batch,
+                body,
+                child_length,
+                child_field->name()->str(),
+                child_metadata,
+                child_field->nullable(),
+                buffer_index,
+                node_index,
+                variadic_counts_idx,
+                *child_field
+            );
+            const std::string_view format = sparrow::data_type_to_format(sparrow::detail::get_data_type_from_array<T>::get());
+
+            auto [child_arrow_array, child_arrow_schema] = sparrow::extract_arrow_structures(std::move(child_array));
+
+            auto** schema_children = new ArrowSchema*[1];
+            schema_children[0] = new ArrowSchema(std::move(child_arrow_schema));
+            ArrowSchema schema = make_non_owning_arrow_schema(
+                format,
+                name,
+                metadata,
+                flags,
+                1, // one child
+                schema_children,
+                nullptr
+            );
+
+            auto** array_children = new ArrowArray*[1];
+            array_children[0] = new ArrowArray(std::move(child_arrow_array));
+            ArrowArray array = make_arrow_array<arrow_array_private_data>(
+                length,
+                null_count,
+                0,
+                1,
+                array_children,
+                nullptr,
+                std::move(buffers)
+            );
+
+            sparrow::arrow_proxy ap{std::move(array), std::move(schema)};
+            return T{std::move(ap)};
+        }
+
+        template<typename T>
+        static sparrow::array deserialize_list_view(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field& field)
+        {
+            return sparrow::array(deserialize_list_view_array<T>(
                 record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field
             ));
         }
