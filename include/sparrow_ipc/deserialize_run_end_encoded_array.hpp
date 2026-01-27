@@ -36,18 +36,22 @@ namespace sparrow_ipc
      * @param metadata Optional metadata pairs  
      * @param nullable Whether the parent array is nullable
      * @param buffer_index The current buffer index (not incremented for parent, incremented by children)
+     * @param node_index The current node index (incremented for parent, passed to children)
      * @param variadic_counts_idx The current index into variadic buffer counts
      * @param field The FlatBuffer Field object describing the array
      * @param array_deserializer The deserializer to use for child arrays
      *
      * @return The deserialized run-end encoded array
      * 
-     * @note KNOWN LIMITATION: This implementation cannot handle zero-length run-end encoded arrays.
-     *       The workaround of inspecting buffer sizes to determine encoded_length fails when 
-     *       arrays are empty (buffers may be null or missing). The proper solution requires
-     *       threading node_index through all deserializers to access FieldNode.length values.
-     *       This is a significant architectural change mentioned throughout the codebase.
+     * @note KNOWN LIMITATION: This implementation may fail on zero-length run-end encoded arrays
+     *       due to missing or null buffer entries in the IPC format combined with sparrow's
+     *       buffer_view construction requirements. The workaround of inferring encoded_length 
+     *       from buffer sizes doesn't work when buffers are absent or have null pointers.
+     *       The proper solution requires threading node_index through all deserializers to 
+     *       access FieldNode.length values directly. This is a significant architectural change.
      *       For non-zero length arrays, the implementation works correctly.
+     *       Users encountering zero-length arrays can filter them out before deserialization
+     *       as a workaround.
      */
     template <typename ArrayDeserializer>
     [[nodiscard]] sparrow::run_end_encoded_array deserialize_run_end_encoded_array(
@@ -58,11 +62,13 @@ namespace sparrow_ipc
         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
         bool nullable,
         size_t& buffer_index,
+        size_t& node_index,
         size_t& variadic_counts_idx,
         const org::apache::arrow::flatbuf::Field& field,
         ArrayDeserializer& array_deserializer
     )
     {
+        ++node_index;  // Consume one FieldNode for this run-end encoded array (parent)
         constexpr size_t n_children = 2;
 
         std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
@@ -99,48 +105,29 @@ namespace sparrow_ipc
         // All buffers belong to the children. So buffer_index currently points to where
         // the first child's buffers start.
         
-        // Handle zero-length case: no runs means encoded_length = 0
-        // Also handle case where buffers don't exist (zero-length children)
-        int64_t encoded_length = 0;
+        // Get encoded_length directly from FieldNodes using node_index.
+        // According to the Arrow IPC spec, FieldNode structs are in pre-ordered flattened order.
+        // For a run-end encoded array:
+        // - Node[node_index-1]: parent with decoded length (already consumed above with ++node_index)
+        // - Node[node_index]: run_ends child with encoded length
+        // - Node[node_index+1]: values child with encoded length
         
-        const auto* flatbuf_buffers = record_batch.buffers();
-        
-        // Check if we have buffers at all and if the data buffer exists and has length
-        if (length > 0 && flatbuf_buffers && buffer_index + 1 < flatbuf_buffers->size())
+        const auto* nodes = record_batch.nodes();
+        if (!nodes || node_index >= nodes->size())
         {
-            const auto* run_ends_data_buffer = flatbuf_buffers->Get(buffer_index + 1);
-            if (run_ends_data_buffer && run_ends_data_buffer->length() > 0)
-            {
-                // Determine encoded length from run_ends data buffer size
-                // Run ends must be int16, int32, or int64
-                const auto run_ends_type = run_ends_field->type_type();
-                if (run_ends_type == org::apache::arrow::flatbuf::Type::Int)
-                {
-                    const auto* int_type = run_ends_field->type_as_Int();
-                    if (!int_type)
-                    {
-                        throw std::runtime_error("Failed to get Int type information for run ends");
-                    }
-                    const auto bit_width = int_type->bitWidth();
-                    const auto byte_width = bit_width / 8;
-                    if (byte_width == 0)
-                    {
-                        throw std::runtime_error("Invalid bit width for run ends integer type");
-                    }
-                    
-                    const auto buffer_length = run_ends_data_buffer->length();
-                    if (buffer_length % byte_width != 0)
-                    {
-                        throw std::runtime_error("Run ends data buffer length is not a multiple of element size");
-                    }
-                    encoded_length = static_cast<int64_t>(buffer_length) / byte_width;
-                }
-                else
-                {
-                    throw std::runtime_error("Run ends must be integer type (got non-Int type)");
-                }
-            }
+            throw std::runtime_error(
+                "Run-end encoded array: insufficient FieldNodes. Expected run_ends child node at index "
+                + std::to_string(node_index)
+            );
         }
+        
+        const auto* run_ends_node = nodes->Get(node_index);
+        if (!run_ends_node)
+        {
+            throw std::runtime_error("Run-end encoded array: null run_ends FieldNode.");
+        }
+        
+        const int64_t encoded_length = run_ends_node->length();
 
         std::optional<std::vector<sparrow::metadata_pair>> run_ends_metadata;
         if (run_ends_field->custom_metadata())
@@ -156,6 +143,7 @@ namespace sparrow_ipc
             run_ends_metadata,
             run_ends_field->nullable(),
             buffer_index,
+            node_index,
             variadic_counts_idx,
             *run_ends_field
         );
@@ -181,6 +169,7 @@ namespace sparrow_ipc
             values_metadata,
             values_field->nullable(),
             buffer_index,
+            node_index,
             variadic_counts_idx,
             *values_field
         );
