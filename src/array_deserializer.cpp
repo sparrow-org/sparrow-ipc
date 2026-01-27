@@ -58,7 +58,7 @@ namespace sparrow_ipc
                                                   bool nullable,
                                                   size_t& buffer_index,
                                                   size_t& variadic_counts_idx,
-                                                  size_t& field_node_index,
+                                                  size_t& next_field_node_index,
                                                   const org::apache::arrow::flatbuf::Field& field)
     {
         initialize_deserializer_map();
@@ -71,10 +71,10 @@ namespace sparrow_ipc
             );
         }
 
-        // Increment field_node_index. It now points to the next FieldNode in depth-first order
+        // Increment next_field_node_index. It now points to the next FieldNode in depth-first order
         // which will be the first child's FieldNode for container types, or the next sibling's (for primitive types).
-        ++field_node_index;
-        return it->second(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field_node_index, field);
+        ++next_field_node_index;
+        return it->second(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, next_field_node_index, field);
     }
 
     sparrow::array array_deserializer::deserialize_int(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -85,7 +85,7 @@ namespace sparrow_ipc
                                                       bool nullable,
                                                       size_t& buffer_index,
                                                       size_t& variadic_counts_idx,
-                                                      size_t& field_node_index,
+                                                      size_t& next_field_node_index,
                                                       const org::apache::arrow::flatbuf::Field& field)
     {
         const auto* int_type = field.type_as_Int();
@@ -96,10 +96,10 @@ namespace sparrow_ipc
         {
             switch (bit_width)
             {
-                case BIT_WIDTH_8:  return deserialize_primitive<int8_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field_node_index, field);
-                case BIT_WIDTH_16: return deserialize_primitive<int16_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field_node_index, field);
-                case BIT_WIDTH_32: return deserialize_primitive<int32_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field_node_index, field);
-                case BIT_WIDTH_64: return deserialize_primitive<int64_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field_node_index, field);
+                case BIT_WIDTH_8:  return deserialize_primitive<int8_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, next_field_node_index, field);
+                case BIT_WIDTH_16: return deserialize_primitive<int16_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, next_field_node_index, field);
+                case BIT_WIDTH_32: return deserialize_primitive<int32_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, next_field_node_index, field);
+                case BIT_WIDTH_64: return deserialize_primitive<int64_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, next_field_node_index, field);
                 default: throw std::runtime_error("Unsupported integer bit width: " + std::to_string(bit_width));
             }
         }
@@ -107,10 +107,10 @@ namespace sparrow_ipc
         {
             switch (bit_width)
             {
-                case BIT_WIDTH_8: return deserialize_primitive<uint8_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field_node_index, field);
-                case BIT_WIDTH_16: return deserialize_primitive<uint16_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field_node_index, field);
-                case BIT_WIDTH_32: return deserialize_primitive<uint32_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field_node_index, field);
-                case BIT_WIDTH_64: return deserialize_primitive<uint64_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field_node_index, field);
+                case BIT_WIDTH_8: return deserialize_primitive<uint8_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, next_field_node_index, field);
+                case BIT_WIDTH_16: return deserialize_primitive<uint16_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, next_field_node_index, field);
+                case BIT_WIDTH_32: return deserialize_primitive<uint32_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, next_field_node_index, field);
+                case BIT_WIDTH_64: return deserialize_primitive<uint64_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, next_field_node_index, field);
                 default: throw std::runtime_error("Unsupported integer bit width: " + std::to_string(bit_width));
             }
         }
@@ -124,16 +124,16 @@ namespace sparrow_ipc
                                                         bool nullable,
                                                         size_t& buffer_index,
                                                         size_t& variadic_counts_idx,
-                                                        size_t& field_node_index,
+                                                        size_t& next_field_node_index,
                                                         const org::apache::arrow::flatbuf::Field& field)
     {
         const auto* float_type = field.type_as_FloatingPoint();
         const auto precision = float_type->precision();
         switch (precision)
         {
-            case org::apache::arrow::flatbuf::Precision::HALF: return deserialize_primitive<sparrow::float16_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field_node_index, field);
-            case org::apache::arrow::flatbuf::Precision::SINGLE: return deserialize_primitive<float>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field_node_index, field);
-            case org::apache::arrow::flatbuf::Precision::DOUBLE: return deserialize_primitive<double>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field_node_index, field);
+            case org::apache::arrow::flatbuf::Precision::HALF: return deserialize_primitive<sparrow::float16_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, next_field_node_index, field);
+            case org::apache::arrow::flatbuf::Precision::SINGLE: return deserialize_primitive<float>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, next_field_node_index, field);
+            case org::apache::arrow::flatbuf::Precision::DOUBLE: return deserialize_primitive<double>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, next_field_node_index, field);
             default: throw std::runtime_error("Unsupported floating point precision: " + std::to_string(static_cast<int>(precision)));
         }
     }
@@ -361,7 +361,7 @@ namespace sparrow_ipc
             bool nullable,
             size_t& buffer_index,
             size_t& variadic_counts_idx,
-            size_t& field_node_index,
+            size_t& next_field_node_index,
             const org::apache::arrow::flatbuf::Field& field)
         {
             std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
@@ -411,7 +411,7 @@ namespace sparrow_ipc
                 child_field->nullable(),
                 buffer_index,
                 variadic_counts_idx,
-                field_node_index,
+                next_field_node_index,
                 *child_field
             );
 
@@ -463,7 +463,7 @@ namespace sparrow_ipc
             bool nullable,
             size_t& buffer_index,
             size_t& variadic_counts_idx,
-            size_t& field_node_index,
+            size_t& next_field_node_index,
             const org::apache::arrow::flatbuf::Field& field)
         {
             std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
@@ -510,7 +510,7 @@ namespace sparrow_ipc
                     child_field->nullable(),
                     buffer_index,
                     variadic_counts_idx,
-                    field_node_index,
+                    next_field_node_index,
                     *child_field
                 ));
             }
@@ -573,11 +573,11 @@ namespace sparrow_ipc
         bool nullable,
         size_t& buffer_index,
         size_t& variadic_counts_idx,
-        size_t& field_node_index,
+        size_t& next_field_node_index,
         const org::apache::arrow::flatbuf::Field& field)
     {
         return sparrow::array(deserialize_fixed_size_list_array(
-            record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field_node_index, field
+            record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, next_field_node_index, field
         ));
     }
 
@@ -590,11 +590,11 @@ namespace sparrow_ipc
         bool nullable,
         size_t& buffer_index,
         size_t& variadic_counts_idx,
-        size_t& field_node_index,
+        size_t& next_field_node_index,
         const org::apache::arrow::flatbuf::Field& field)
     {
         return sparrow::array(deserialize_struct_array(
-            record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field_node_index, field
+            record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, next_field_node_index, field
         ));
     }
 
@@ -607,7 +607,7 @@ namespace sparrow_ipc
         bool nullable,
         size_t& buffer_index,
         size_t& variadic_counts_idx,
-        size_t& field_node_index,
+        size_t& next_field_node_index,
         const org::apache::arrow::flatbuf::Field& field)
     {
         // TODO handle the keyssorted in flags (needs a custom test) when true
@@ -620,7 +620,7 @@ namespace sparrow_ipc
             nullable,
             buffer_index,
             variadic_counts_idx,
-            field_node_index,
+            next_field_node_index,
             field
         ));
 }
