@@ -142,16 +142,14 @@ namespace sparrow_ipc
             *values_field
         );
 
-        // Extract Arrow structures from child arrays
         auto [run_ends_arrow_array, run_ends_arrow_schema] = sparrow::extract_arrow_structures(std::move(run_ends_array));
         auto [values_arrow_array, values_arrow_schema] = sparrow::extract_arrow_structures(std::move(values_array));
 
-        // Create schema with two children
         auto** schema_children = new ArrowSchema*[n_children];
         schema_children[0] = new ArrowSchema(std::move(run_ends_arrow_schema));
         schema_children[1] = new ArrowSchema(std::move(values_arrow_schema));
 
-        const std::string_view format = "+r";  // Run-end encoded format
+        const std::string_view format = "+r";
         ArrowSchema schema = make_non_owning_arrow_schema(
             format,
             name,
@@ -162,7 +160,6 @@ namespace sparrow_ipc
             nullptr
         );
 
-        // Create array with two children and no buffers
         auto** array_children = new ArrowArray*[n_children];
         array_children[0] = new ArrowArray(std::move(run_ends_arrow_array));
         array_children[1] = new ArrowArray(std::move(values_arrow_array));
@@ -170,12 +167,12 @@ namespace sparrow_ipc
         std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;  // No buffers
 
         ArrowArray array = make_arrow_array<arrow_array_private_data>(
-            length,         // Decoded length
-            0,              // null_count (run-end encoded arrays don't have nulls at parent level)
-            0,              // offset
-            n_children,              // two children
+            length,
+            0,
+            0,
+            n_children,
             array_children,
-            nullptr,        // no dictionary
+            nullptr,
             std::move(buffers)
         );
 
