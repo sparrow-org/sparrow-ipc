@@ -16,6 +16,8 @@
 #include "sparrow_ipc/deserialize_utils.hpp"
 #include "sparrow_ipc/metadata.hpp"
 
+class array_deserializer;
+
 namespace sparrow_ipc
 {
     /**
@@ -43,7 +45,6 @@ namespace sparrow_ipc
      *
      * @return The deserialized run-end encoded array
      */
-    template <typename ArrayDeserializer>
     [[nodiscard]] sparrow::run_end_encoded_array deserialize_run_end_encoded_array(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         std::span<const uint8_t> body,
@@ -54,8 +55,7 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& variadic_counts_idx,
-        const org::apache::arrow::flatbuf::Field& field,
-        ArrayDeserializer& array_deserializer
+        const org::apache::arrow::flatbuf::Field& field
     )
     {
         ++node_index;  // Consume one FieldNode for this run-end encoded array (parent)
@@ -103,7 +103,7 @@ namespace sparrow_ipc
             run_ends_metadata = to_sparrow_metadata(*run_ends_field->custom_metadata());
         }
         
-        sparrow::array run_ends_array = array_deserializer.deserialize(
+        sparrow::array run_ends_array = array_deserializer::deserialize(
             record_batch,
             body,
             encoded_length,
@@ -129,7 +129,7 @@ namespace sparrow_ipc
             values_metadata = to_sparrow_metadata(*values_field->custom_metadata());
         }
 
-        sparrow::array values_array = array_deserializer.deserialize(
+        sparrow::array values_array = array_deserializer::deserialize(
             record_batch,
             body,
             encoded_length,  // Same encoded length as run ends

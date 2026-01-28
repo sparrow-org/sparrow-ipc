@@ -643,7 +643,6 @@ namespace sparrow_ipc
         size_t& variadic_counts_idx,
         const org::apache::arrow::flatbuf::Field& field)
     {
-        static array_deserializer instance;
         return sparrow::array(deserialize_run_end_encoded_array(
             record_batch,
             body,
@@ -654,8 +653,7 @@ namespace sparrow_ipc
             buffer_index,
             node_index,
             variadic_counts_idx,
-            field,
-            instance
+            field
         ));
     }
 }
