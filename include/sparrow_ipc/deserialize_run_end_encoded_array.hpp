@@ -149,7 +149,7 @@ namespace sparrow_ipc
         schema_children[0] = new ArrowSchema(std::move(run_ends_arrow_schema));
         schema_children[1] = new ArrowSchema(std::move(values_arrow_schema));
 
-        const std::string_view format = "+r";
+        const std::string_view format = "+r"; // TODO: Use sparrow::data_type_to_format(sparrow::data_type::RUN_ENCODED); when it will be available on sparrow
         ArrowSchema schema = make_non_owning_arrow_schema(
             format,
             name,
@@ -164,7 +164,6 @@ namespace sparrow_ipc
         array_children[0] = new ArrowArray(std::move(run_ends_arrow_array));
         array_children[1] = new ArrowArray(std::move(values_arrow_array));
 
-        std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;  // No buffers
 
         ArrowArray array = make_arrow_array<arrow_array_private_data>(
             length,
@@ -173,7 +172,7 @@ namespace sparrow_ipc
             n_children,
             array_children,
             nullptr,
-            std::move(buffers)
+             std::vector<arrow_array_private_data::optionally_owned_buffer>{} // No buffers at parent level
         );
 
         sparrow::arrow_proxy ap{std::move(array), std::move(schema)};
