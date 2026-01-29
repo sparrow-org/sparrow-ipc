@@ -9,6 +9,7 @@
 #include "sparrow_ipc/deserialize_fixed_size_binary_array.hpp"
 #include "sparrow_ipc/deserialize_interval_array.hpp"
 #include "sparrow_ipc/deserialize_null_array.hpp"
+#include "sparrow_ipc/deserialize_run_end_encoded_array.hpp"
 #include "sparrow_ipc/deserialize_time_related_arrays.hpp"
 
 namespace sparrow_ipc
@@ -46,6 +47,7 @@ namespace sparrow_ipc
         m_deserializer_map[org::apache::arrow::flatbuf::Type::FixedSizeList] = &deserialize_fixed_size_list;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Struct_] = &deserialize_struct;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Map] = &deserialize_map;
+        m_deserializer_map[org::apache::arrow::flatbuf::Type::RunEndEncoded] = &deserialize_run_end_encoded;
     }
 
     sparrow::array array_deserializer::deserialize(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -55,7 +57,8 @@ namespace sparrow_ipc
                                                   const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                   bool nullable,
                                                   size_t& buffer_index,
-                                                  size_t& variadic_counts_idx,
+                                                  size_t& node_index,
+                                                  size_t& variadic_counts_idx   ,
                                                   const org::apache::arrow::flatbuf::Field& field)
     {
         initialize_deserializer_map();
@@ -67,7 +70,7 @@ namespace sparrow_ipc
                 + " for field '" + name + "'"
             );
         }
-        return it->second(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
+        return it->second(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
     }
 
     sparrow::array array_deserializer::deserialize_int(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -77,6 +80,7 @@ namespace sparrow_ipc
                                                       const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                       bool nullable,
                                                       size_t& buffer_index,
+                                                      size_t& node_index,
                                                       size_t& variadic_counts_idx,
                                                       const org::apache::arrow::flatbuf::Field& field)
     {
@@ -88,10 +92,10 @@ namespace sparrow_ipc
         {
             switch (bit_width)
             {
-                case BIT_WIDTH_8:  return deserialize_primitive<int8_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
-                case BIT_WIDTH_16: return deserialize_primitive<int16_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
-                case BIT_WIDTH_32: return deserialize_primitive<int32_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
-                case BIT_WIDTH_64: return deserialize_primitive<int64_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
+                case BIT_WIDTH_8:  return deserialize_primitive<int8_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
+                case BIT_WIDTH_16: return deserialize_primitive<int16_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
+                case BIT_WIDTH_32: return deserialize_primitive<int32_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
+                case BIT_WIDTH_64: return deserialize_primitive<int64_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
                 default: throw std::runtime_error("Unsupported integer bit width: " + std::to_string(bit_width));
             }
         }
@@ -99,10 +103,10 @@ namespace sparrow_ipc
         {
             switch (bit_width)
             {
-                case BIT_WIDTH_8: return deserialize_primitive<uint8_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
-                case BIT_WIDTH_16: return deserialize_primitive<uint16_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
-                case BIT_WIDTH_32: return deserialize_primitive<uint32_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
-                case BIT_WIDTH_64: return deserialize_primitive<uint64_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
+                case BIT_WIDTH_8: return deserialize_primitive<uint8_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
+                case BIT_WIDTH_16: return deserialize_primitive<uint16_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
+                case BIT_WIDTH_32: return deserialize_primitive<uint32_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
+                case BIT_WIDTH_64: return deserialize_primitive<uint64_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
                 default: throw std::runtime_error("Unsupported integer bit width: " + std::to_string(bit_width));
             }
         }
@@ -115,6 +119,7 @@ namespace sparrow_ipc
                                                         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                         bool nullable,
                                                         size_t& buffer_index,
+                                                        size_t& node_index,
                                                         size_t& variadic_counts_idx,
                                                         const org::apache::arrow::flatbuf::Field& field)
     {
@@ -122,9 +127,9 @@ namespace sparrow_ipc
         const auto precision = float_type->precision();
         switch (precision)
         {
-            case org::apache::arrow::flatbuf::Precision::HALF: return deserialize_primitive<sparrow::float16_t>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
-            case org::apache::arrow::flatbuf::Precision::SINGLE: return deserialize_primitive<float>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
-            case org::apache::arrow::flatbuf::Precision::DOUBLE: return deserialize_primitive<double>(record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field);
+            case org::apache::arrow::flatbuf::Precision::HALF: return deserialize_primitive<sparrow::float16_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
+            case org::apache::arrow::flatbuf::Precision::SINGLE: return deserialize_primitive<float>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
+            case org::apache::arrow::flatbuf::Precision::DOUBLE: return deserialize_primitive<double>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
             default: throw std::runtime_error("Unsupported floating point precision: " + std::to_string(static_cast<int>(precision)));
         }
     }
@@ -136,9 +141,11 @@ namespace sparrow_ipc
                                                  const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                  bool nullable,
                                                  size_t& buffer_index,
-                                                 size_t&,
+                                                 size_t& node_index,
+                                                 size_t& /*variadic_counts_idx*/,
                                                  const org::apache::arrow::flatbuf::Field& field)
     {
+        ++node_index;  // Consume one FieldNode for this fixed-size binary array
         const auto* fixed_size_binary_field = field.type_as_FixedSizeBinary();
         return sparrow::array(deserialize_fixed_width_binary_array(
             record_batch, body, length, name, metadata, nullable, buffer_index,
@@ -153,9 +160,11 @@ namespace sparrow_ipc
                                                           const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                           bool nullable,
                                                           size_t& buffer_index,
-                                                          size_t&,
+                                                          size_t& node_index,
+                                                          size_t& /*variadic_counts_idx*/,
                                                           const org::apache::arrow::flatbuf::Field& field)
     {
+        ++node_index;  // Consume one FieldNode for this decimal array
         const auto* decimal_field = field.type_as_Decimal();
         const auto scale = decimal_field->scale();
         const auto precision = decimal_field->precision();
@@ -190,9 +199,11 @@ namespace sparrow_ipc
                                                        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                        bool nullable,
                                                        size_t& buffer_index,
-                                                       size_t&,
+                                                       size_t& node_index,
+                                                       size_t& /*variadic_counts_idx*/,
                                                        const org::apache::arrow::flatbuf::Field&)
     {
+        ++node_index;  // Consume one FieldNode for this null array
         return sparrow::array(deserialize_null_array(
             record_batch, body, length, name, metadata, nullable, buffer_index
         ));
@@ -205,9 +216,11 @@ namespace sparrow_ipc
                                                        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                        bool nullable,
                                                        size_t& buffer_index,
-                                                       size_t&,
+                                                       size_t& node_index,
+                                                       size_t& /*variadic_counts_idx*/,
                                                        const org::apache::arrow::flatbuf::Field& field)
     {
+        ++node_index;  // Consume one FieldNode for this date array
         const auto date_type = field.type_as_Date();
         const auto date_unit = date_type->unit();
         switch (date_unit)
@@ -225,9 +238,11 @@ namespace sparrow_ipc
                                                            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                            bool nullable,
                                                            size_t& buffer_index,
-                                                           size_t&,
+                                                           size_t& node_index,
+                                                           size_t& /*variadic_counts_idx*/,
                                                            const org::apache::arrow::flatbuf::Field& field)
     {
+        ++node_index;  // Consume one FieldNode for this interval array
         const auto* interval_type = field.type_as_Interval();
         const org::apache::arrow::flatbuf::IntervalUnit interval_unit = interval_type->unit();
         switch (interval_unit)
@@ -246,9 +261,11 @@ namespace sparrow_ipc
                                                            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                            bool nullable,
                                                            size_t& buffer_index,
-                                                           size_t&,
+                                                           size_t& node_index,
+                                                           size_t& /*variadic_counts_idx*/,
                                                            const org::apache::arrow::flatbuf::Field& field)
     {
+        ++node_index;  // Consume one FieldNode for this duration array
         const auto* duration_type = field.type_as_Duration();
         const org::apache::arrow::flatbuf::TimeUnit time_unit = duration_type->unit();
         switch (time_unit)
@@ -268,9 +285,11 @@ namespace sparrow_ipc
                                                        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                        bool nullable,
                                                        size_t& buffer_index,
-                                                       size_t&,
+                                                       size_t& node_index,
+                                                       size_t& /*variadic_counts_idx*/,
                                                        const org::apache::arrow::flatbuf::Field& field)
     {
+        ++node_index;  // Consume one FieldNode for this time array
         const auto time_type = field.type_as_Time();
         const auto time_unit = time_type->unit();
         switch (time_unit)
@@ -290,9 +309,11 @@ namespace sparrow_ipc
                                                             const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
                                                             bool nullable,
                                                             size_t& buffer_index,
-                                                            size_t&,
+                                                            size_t& node_index,
+                                                            size_t& /*variadic_counts_idx*/,
                                                             const org::apache::arrow::flatbuf::Field& field)
     {
+        ++node_index;  // Consume one FieldNode for this timestamp array
         const auto timestamp_type = field.type_as_Timestamp();
         const auto time_unit = timestamp_type->unit();
         const bool has_timezone = timestamp_type->timezone() != nullptr;
@@ -343,9 +364,11 @@ namespace sparrow_ipc
             const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
             bool nullable,
             size_t& buffer_index,
+            size_t& node_index,
             size_t& variadic_counts_idx,
             const org::apache::arrow::flatbuf::Field& field)
         {
+            ++node_index;  // Consume one FieldNode for this fixed-size list array
             std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
             if (nullable)
             {
@@ -392,6 +415,7 @@ namespace sparrow_ipc
                 child_metadata,
                 child_field->nullable(),
                 buffer_index,
+                node_index,
                 variadic_counts_idx,
                 *child_field
             );
@@ -443,9 +467,11 @@ namespace sparrow_ipc
             const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
             bool nullable,
             size_t& buffer_index,
+            size_t& node_index,
             size_t& variadic_counts_idx,
             const org::apache::arrow::flatbuf::Field& field)
         {
+            ++node_index;  // Consume one FieldNode for this struct array
             std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
             if (nullable)
             {
@@ -489,6 +515,7 @@ namespace sparrow_ipc
                     child_metadata,
                     child_field->nullable(),
                     buffer_index,
+                    node_index,
                     variadic_counts_idx,
                     *child_field
                 ));
@@ -551,11 +578,12 @@ namespace sparrow_ipc
         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
         bool nullable,
         size_t& buffer_index,
+        size_t& node_index,
         size_t& variadic_counts_idx,
         const org::apache::arrow::flatbuf::Field& field)
     {
         return sparrow::array(deserialize_fixed_size_list_array(
-            record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field
+            record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field
         ));
     }
 
@@ -567,11 +595,12 @@ namespace sparrow_ipc
         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
         bool nullable,
         size_t& buffer_index,
+        size_t& node_index,
         size_t& variadic_counts_idx,
         const org::apache::arrow::flatbuf::Field& field)
     {
         return sparrow::array(deserialize_struct_array(
-            record_batch, body, length, name, metadata, nullable, buffer_index, variadic_counts_idx, field
+            record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field
         ));
     }
 
@@ -583,6 +612,7 @@ namespace sparrow_ipc
         const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
         bool nullable,
         size_t& buffer_index,
+        size_t& node_index,
         size_t& variadic_counts_idx,
         const org::apache::arrow::flatbuf::Field& field)
     {
@@ -595,8 +625,35 @@ namespace sparrow_ipc
             metadata,
             nullable,
             buffer_index,
+            node_index,
             variadic_counts_idx,
             field
         ));
-}
+    }
+
+    sparrow::array array_deserializer::deserialize_run_end_encoded(
+        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+        const std::span<const uint8_t>& body,
+        const int64_t length,
+        const std::string& name,
+        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+        bool nullable,
+        size_t& buffer_index,
+        size_t& node_index,
+        size_t& variadic_counts_idx,
+        const org::apache::arrow::flatbuf::Field& field)
+    {
+        return sparrow::array(deserialize_run_end_encoded_array(
+            record_batch,
+            body,
+            length,
+            name,
+            metadata,
+            nullable,
+            buffer_index,
+            node_index,
+            variadic_counts_idx,
+            field
+        ));
+    }
 }

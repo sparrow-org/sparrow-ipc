@@ -54,6 +54,7 @@ const std::vector<std::filesystem::path> files_paths_to_test = {
     tests_resources_files_path / "generated_recursive_nested",
     tests_resources_files_path / "generated_map",
     tests_resources_files_path / "generated_map_non_canonical",
+    tests_resources_files_path / "generated_run_end_encoded"
 };
 
 const std::vector<std::filesystem::path> files_paths_to_test_with_lz4_compression = {
