@@ -58,7 +58,7 @@ namespace sparrow_ipc
                                                   bool nullable,
                                                   size_t& buffer_index,
                                                   size_t& node_index,
-                                                  size_t& variadic_counts_idx,
+                                                  size_t& variadic_counts_idx   ,
                                                   const org::apache::arrow::flatbuf::Field& field)
     {
         initialize_deserializer_map();
@@ -142,7 +142,7 @@ namespace sparrow_ipc
                                                  bool nullable,
                                                  size_t& buffer_index,
                                                  size_t& node_index,
-                                                 size_t& variadic_counts_idx,
+                                                 size_t& /*variadic_counts_idx*/,
                                                  const org::apache::arrow::flatbuf::Field& field)
     {
         ++node_index;  // Consume one FieldNode for this fixed-size binary array
@@ -161,7 +161,7 @@ namespace sparrow_ipc
                                                           bool nullable,
                                                           size_t& buffer_index,
                                                           size_t& node_index,
-                                                          size_t& variadic_counts_idx,
+                                                          size_t& /*variadic_counts_idx*/,
                                                           const org::apache::arrow::flatbuf::Field& field)
     {
         ++node_index;  // Consume one FieldNode for this decimal array
@@ -200,7 +200,7 @@ namespace sparrow_ipc
                                                        bool nullable,
                                                        size_t& buffer_index,
                                                        size_t& node_index,
-                                                       size_t& variadic_counts_idx,
+                                                       size_t& /*variadic_counts_idx*/,
                                                        const org::apache::arrow::flatbuf::Field&)
     {
         ++node_index;  // Consume one FieldNode for this null array
@@ -217,7 +217,7 @@ namespace sparrow_ipc
                                                        bool nullable,
                                                        size_t& buffer_index,
                                                        size_t& node_index,
-                                                       size_t& variadic_counts_idx,
+                                                       size_t& /*variadic_counts_idx*/,
                                                        const org::apache::arrow::flatbuf::Field& field)
     {
         ++node_index;  // Consume one FieldNode for this date array
@@ -239,7 +239,7 @@ namespace sparrow_ipc
                                                            bool nullable,
                                                            size_t& buffer_index,
                                                            size_t& node_index,
-                                                           size_t& variadic_counts_idx,
+                                                           size_t& /*variadic_counts_idx*/,
                                                            const org::apache::arrow::flatbuf::Field& field)
     {
         ++node_index;  // Consume one FieldNode for this interval array
@@ -262,7 +262,7 @@ namespace sparrow_ipc
                                                            bool nullable,
                                                            size_t& buffer_index,
                                                            size_t& node_index,
-                                                           size_t& variadic_counts_idx,
+                                                           size_t& /*variadic_counts_idx*/,
                                                            const org::apache::arrow::flatbuf::Field& field)
     {
         ++node_index;  // Consume one FieldNode for this duration array
@@ -286,7 +286,7 @@ namespace sparrow_ipc
                                                        bool nullable,
                                                        size_t& buffer_index,
                                                        size_t& node_index,
-                                                       size_t& variadic_counts_idx,
+                                                       size_t& /*variadic_counts_idx*/,
                                                        const org::apache::arrow::flatbuf::Field& field)
     {
         ++node_index;  // Consume one FieldNode for this time array
@@ -310,7 +310,7 @@ namespace sparrow_ipc
                                                             bool nullable,
                                                             size_t& buffer_index,
                                                             size_t& node_index,
-                                                            size_t& variadic_counts_idx,
+                                                            size_t& /*variadic_counts_idx*/,
                                                             const org::apache::arrow::flatbuf::Field& field)
     {
         ++node_index;  // Consume one FieldNode for this timestamp array
