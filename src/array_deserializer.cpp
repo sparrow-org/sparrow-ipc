@@ -60,7 +60,7 @@ namespace sparrow_ipc
                                                   bool nullable,
                                                   size_t& buffer_index,
                                                   size_t& node_index,
-                                                  size_t& variadic_counts_idx   ,
+                                                  size_t& variadic_counts_idx,
                                                   const org::apache::arrow::flatbuf::Field& field)
     {
         initialize_deserializer_map();

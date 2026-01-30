@@ -99,7 +99,7 @@ namespace sparrow_ipc
                                                     bool nullable,
                                                     size_t& buffer_index,
                                                     size_t& node_index,
-                                                    size_t& variadic_counts_idx,
+                                                    size_t& /*variadic_counts_idx*/,
                                                     const org::apache::arrow::flatbuf::Field&)
         {
             ++node_index;  // Consume one FieldNode for this primitive array
@@ -117,7 +117,7 @@ namespace sparrow_ipc
                                                                bool nullable,
                                                                size_t& buffer_index,
                                                                size_t& node_index,
-                                                               size_t& variadic_counts_idx,
+                                                               size_t& /*variadic_counts_idx*/,
                                                                const org::apache::arrow::flatbuf::Field&)
         {
             ++node_index;  // Consume one FieldNode for this binary array
