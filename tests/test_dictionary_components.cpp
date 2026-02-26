@@ -1,9 +1,8 @@
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <vector>
 
 #include <doctest/doctest.h>
+
 #include <sparrow/utils/metadata.hpp>
 
 #include "sparrow_ipc/any_output_stream.hpp"
@@ -14,21 +13,11 @@
 #include "sparrow_ipc/magic_values.hpp"
 #include "sparrow_ipc/memory_output_stream.hpp"
 #include "sparrow_ipc/serialize.hpp"
+#include "test_helper.hpp"
 
 namespace
 {
     namespace sp = sparrow;
-
-    const std::filesystem::path arrow_testing_data_dir = ARROW_TESTING_DATA_DIR;
-    const std::filesystem::path dictionary_fixture_base =
-        arrow_testing_data_dir / "data" / "arrow-ipc-stream" / "integration" / "cpp-21.0.0" / "generated_dictionary";
-
-    std::vector<uint8_t> read_binary_file(const std::filesystem::path& file_path)
-    {
-        std::ifstream file(file_path, std::ios::binary);
-        REQUIRE(file.is_open());
-        return std::vector<uint8_t>((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    }
 
     sp::record_batch create_dictionary_values_batch()
     {
@@ -39,9 +28,7 @@ namespace
 
     sp::record_batch create_non_dictionary_batch()
     {
-        return sp::record_batch(
-            {{"values", sp::array(sp::primitive_array<int32_t>({1, 2, 3}))}}
-        );
+        return sp::record_batch({{"values", sp::array(sp::primitive_array<int32_t>({1, 2, 3}))}});
     }
 
     std::vector<uint8_t> serialize_record_batch_without_schema(const sp::record_batch& record_batch)
@@ -111,10 +98,12 @@ TEST_SUITE("dictionary_components")
 
         SUBCASE("with dictionary metadata")
         {
-            const auto raw_metadata = sparrow::get_metadata_from_key_values(std::vector<sparrow::metadata_pair>{
-                {"ARROW:dictionary:id", "42"},
-                {"ARROW:dictionary:ordered", "true"}
-            });
+            const auto raw_metadata = sparrow::get_metadata_from_key_values(
+                std::vector<sparrow::metadata_pair>{
+                    {"ARROW:dictionary:id", "42"},
+                    {"ARROW:dictionary:ordered", "true"}
+                }
+            );
 
             ArrowSchema schema{};
             schema.metadata = raw_metadata.c_str();
@@ -168,6 +157,48 @@ TEST_SUITE("dictionary_components")
             CHECK_EQ(appended->get().nb_rows(), size_t{6});
         }
 
+        SUBCASE("delta with existing id preserves null string values")
+        {
+            auto base_with_nulls = sp::record_batch({{"dict_values",
+                                                     sp::array(sp::string_array(std::vector<sp::nullable<std::string>>{
+                                                         sp::nullable<std::string>("alpha"),
+                                                         sp::nullable<std::string>(),
+                                                         sp::nullable<std::string>("gamma")
+                                                     }))}});
+
+            auto delta_with_nulls = sp::record_batch({{"dict_values",
+                                                      sp::array(sp::string_array(std::vector<sp::nullable<std::string>>{
+                                                          sp::nullable<std::string>(),
+                                                          sp::nullable<std::string>("epsilon")
+                                                      }))}});
+
+            cache.store_dictionary(77, std::move(base_with_nulls), false);
+            cache.store_dictionary(77, std::move(delta_with_nulls), true);
+
+            const auto appended = cache.get_dictionary(77);
+            REQUIRE(appended.has_value());
+            CHECK_EQ(appended->get().nb_rows(), size_t{5});
+
+            const auto& dict_values = appended->get().get_column(0);
+            dict_values.visit([](const auto& impl) {
+                if constexpr (sp::is_string_array_v<std::decay_t<decltype(impl)>>)
+                {
+                    REQUIRE(impl[0].has_value());
+                    CHECK_EQ(impl[0].value(), "alpha");
+
+                    CHECK_FALSE(impl[1].has_value());
+
+                    REQUIRE(impl[2].has_value());
+                    CHECK_EQ(impl[2].value(), "gamma");
+
+                    CHECK_FALSE(impl[3].has_value());
+
+                    REQUIRE(impl[4].has_value());
+                    CHECK_EQ(impl[4].value(), "epsilon");
+                }
+            });
+        }
+
         SUBCASE("delta with existing id and mismatched type throws")
         {
             auto mismatched = sp::record_batch(
@@ -183,10 +214,8 @@ TEST_SUITE("dictionary_components")
         SUBCASE("invalid dictionary batch throws")
         {
             auto invalid = sp::record_batch(
-                {
-                    {"a", sp::array(sp::primitive_array<int32_t>({1, 2}))},
-                    {"b", sp::array(sp::primitive_array<int32_t>({3, 4}))}
-                }
+                {{"a", sp::array(sp::primitive_array<int32_t>({1, 2}))},
+                 {"b", sp::array(sp::primitive_array<int32_t>({3, 4}))}}
             );
             CHECK_THROWS_AS(cache.store_dictionary(9, std::move(invalid), false), std::invalid_argument);
         }
@@ -237,7 +266,7 @@ TEST_SUITE("deserialize_failures")
     {
         const auto bytes = serialize_record_batch_without_schema(create_non_dictionary_batch());
         CHECK_THROWS_WITH_AS(
-            (void)sparrow_ipc::deserialize_stream(std::span<const uint8_t>(bytes)),
+            (void) sparrow_ipc::deserialize_stream(std::span<const uint8_t>(bytes)),
             "RecordBatch encountered before Schema message.",
             std::runtime_error
         );
@@ -247,7 +276,7 @@ TEST_SUITE("deserialize_failures")
     {
         const auto bytes = serialize_dictionary_batch_without_schema(123);
         CHECK_THROWS_WITH_AS(
-            (void)sparrow_ipc::deserialize_stream(std::span<const uint8_t>(bytes)),
+            (void) sparrow_ipc::deserialize_stream(std::span<const uint8_t>(bytes)),
             "DictionaryBatch encountered before Schema message.",
             std::runtime_error
         );
@@ -257,7 +286,7 @@ TEST_SUITE("deserialize_failures")
     {
         const auto bytes = serialize_schema_then_undeclared_dictionary_batch(9876);
         CHECK_THROWS_WITH_AS(
-            (void)sparrow_ipc::deserialize_stream(std::span<const uint8_t>(bytes)),
+            (void) sparrow_ipc::deserialize_stream(std::span<const uint8_t>(bytes)),
             "Dictionary with id 9876 is not declared in schema",
             std::runtime_error
         );

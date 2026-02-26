@@ -124,9 +124,6 @@ set(SPARROW_IPC_HEADERS
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/config/config.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/config/sparrow_ipc_version.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_array_impl.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/dictionary_cache.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/dictionary_tracker.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/dictionary_utils.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_decimal_array.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_duration_array.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_fixed_size_binary_array.hpp
@@ -140,6 +137,9 @@ set(SPARROW_IPC_HEADERS
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_variable_size_binary_view_array.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserializer.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/dictionary_cache.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/dictionary_tracker.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/dictionary_utils.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/encapsulated_message.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/flatbuffer_utils.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/magic_values.hpp
@@ -156,20 +156,22 @@ set(SPARROW_IPC_SRC
     ${SPARROW_IPC_SOURCE_DIR}/any_output_stream.cpp
     ${SPARROW_IPC_SOURCE_DIR}/array_deserializer.cpp
     ${SPARROW_IPC_SOURCE_DIR}/array_deserializer.hpp
+    ${SPARROW_IPC_SOURCE_DIR}/array_deserialization_dictionaries.cpp
+    ${SPARROW_IPC_SOURCE_DIR}/array_deserialization_dictionaries.hpp
     ${SPARROW_IPC_SOURCE_DIR}/arrow_interface/arrow_array.cpp
     ${SPARROW_IPC_SOURCE_DIR}/arrow_interface/arrow_array/private_data.cpp
     ${SPARROW_IPC_SOURCE_DIR}/arrow_interface/arrow_schema.cpp
     ${SPARROW_IPC_SOURCE_DIR}/arrow_interface/arrow_schema/private_data.cpp
     ${SPARROW_IPC_SOURCE_DIR}/chunk_memory_serializer.cpp
-    ${SPARROW_IPC_SOURCE_DIR}/compression.cpp
     ${SPARROW_IPC_SOURCE_DIR}/compression_impl.hpp
+    ${SPARROW_IPC_SOURCE_DIR}/compression.cpp
     ${SPARROW_IPC_SOURCE_DIR}/deserialize_fixed_size_binary_array.cpp
-    ${SPARROW_IPC_SOURCE_DIR}/dictionary_cache.cpp
-    ${SPARROW_IPC_SOURCE_DIR}/dictionary_tracker.cpp
-    ${SPARROW_IPC_SOURCE_DIR}/dictionary_utils.cpp
     ${SPARROW_IPC_SOURCE_DIR}/deserialize_null_array.cpp
     ${SPARROW_IPC_SOURCE_DIR}/deserialize_utils.cpp
     ${SPARROW_IPC_SOURCE_DIR}/deserialize.cpp
+    ${SPARROW_IPC_SOURCE_DIR}/dictionary_cache.cpp
+    ${SPARROW_IPC_SOURCE_DIR}/dictionary_tracker.cpp
+    ${SPARROW_IPC_SOURCE_DIR}/dictionary_utils.cpp
     ${SPARROW_IPC_SOURCE_DIR}/encapsulated_message.cpp
     ${SPARROW_IPC_SOURCE_DIR}/flatbuffer_utils.cpp
     ${SPARROW_IPC_SOURCE_DIR}/metadata.cpp

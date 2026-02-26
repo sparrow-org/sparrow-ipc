@@ -5,6 +5,7 @@
 
 #include <sparrow/map_array.hpp>
 
+#include "array_deserialization_dictionaries.hpp"
 #include "sparrow_ipc/deserialize_decimal_array.hpp"
 #include "sparrow_ipc/deserialize_duration_array.hpp"
 #include "sparrow_ipc/deserialize_fixed_size_binary_array.hpp"
@@ -16,174 +17,6 @@
 
 namespace sparrow_ipc
 {
-    namespace
-    {
-        // Integer bit width constants
-        constexpr int32_t BIT_WIDTH_8 = 8;
-        constexpr int32_t BIT_WIDTH_16 = 16;
-        constexpr int32_t BIT_WIDTH_32 = 32;
-        constexpr int32_t BIT_WIDTH_64 = 64;
-
-        void resolve_child_dictionaries_in_place(
-            ArrowArray& array,
-            ArrowSchema& schema,
-            const org::apache::arrow::flatbuf::Field& field,
-            const dictionary_cache& dictionaries
-        );
-
-        void attach_dictionary_to_field_if_needed(
-            ArrowArray& array,
-            ArrowSchema& schema,
-            const org::apache::arrow::flatbuf::Field& field,
-            const dictionary_cache& dictionaries
-        )
-        {
-            if (field.dictionary() == nullptr || array.dictionary != nullptr || schema.dictionary != nullptr)
-            {
-                return;
-            }
-
-            const auto dictionary_id = field.dictionary()->id();
-            const auto dictionary_batch = dictionaries.get_dictionary(dictionary_id);
-            if (!dictionary_batch.has_value())
-            {
-                throw std::runtime_error(
-                    "Dictionary with id " + std::to_string(dictionary_id)
-                    + " not found when decoding dictionary-encoded field"
-                );
-            }
-
-            const auto& dictionary_columns = dictionary_batch->get().columns();
-            if (dictionary_columns.size() != 1)
-            {
-                throw std::runtime_error("Dictionary batch must have exactly one column");
-            }
-
-            const auto& dictionary_proxy = sparrow::detail::array_access::get_arrow_proxy(
-                dictionary_columns.front()
-            );
-            auto dictionary_arrow_array = sparrow::copy_array(
-                dictionary_proxy.array(),
-                dictionary_proxy.schema()
-            );
-            auto dictionary_arrow_schema = sparrow::copy_schema(dictionary_proxy.schema());
-
-            resolve_child_dictionaries_in_place(dictionary_arrow_array, dictionary_arrow_schema, field, dictionaries);
-
-            array.dictionary = new ArrowArray(std::move(dictionary_arrow_array));
-            schema.dictionary = new ArrowSchema(std::move(dictionary_arrow_schema));
-        }
-
-        void resolve_child_dictionaries_in_place(
-            ArrowArray& array,
-            ArrowSchema& schema,
-            const org::apache::arrow::flatbuf::Field& field,
-            const dictionary_cache& dictionaries
-        )
-        {
-            const auto* children = field.children();
-            if (children == nullptr || array.children == nullptr || schema.children == nullptr)
-            {
-                return;
-            }
-
-            const auto child_count = std::min(
-                static_cast<size_t>(children->size()),
-                static_cast<size_t>(array.n_children)
-            );
-            for (size_t i = 0; i < child_count; ++i)
-            {
-                const auto* child_field = children->Get(i);
-                ArrowArray* child_array = array.children[i];
-                ArrowSchema* child_schema = schema.children[i];
-                if (child_field == nullptr || child_array == nullptr || child_schema == nullptr)
-                {
-                    continue;
-                }
-
-                attach_dictionary_to_field_if_needed(*child_array, *child_schema, *child_field, dictionaries);
-                resolve_child_dictionaries_in_place(*child_array, *child_schema, *child_field, dictionaries);
-            }
-        }
-
-        sparrow::array apply_dictionary_encoding(
-            sparrow::array index_array,
-            const org::apache::arrow::flatbuf::Field& field,
-            const dictionary_cache& dictionaries
-        )
-        {
-            if (field.dictionary() == nullptr)
-            {
-                return index_array;
-            }
-
-            auto [index_arrow_array, index_arrow_schema] = sparrow::extract_arrow_structures(std::move(index_array));
-            attach_dictionary_to_field_if_needed(index_arrow_array, index_arrow_schema, field, dictionaries);
-
-            return sparrow::array(std::move(index_arrow_array), std::move(index_arrow_schema));
-        }
-
-        sparrow::array deserialize_dictionary_indices(
-            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-            const std::span<const uint8_t>& body,
-            int64_t length,
-            const std::string& name,
-            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-            bool nullable,
-            size_t& buffer_index,
-            size_t& node_index,
-            const org::apache::arrow::flatbuf::Field& field
-        )
-        {
-            const auto* dictionary = field.dictionary();
-            if (dictionary == nullptr || dictionary->indexType() == nullptr)
-            {
-                throw std::runtime_error("Dictionary-encoded field is missing indexType");
-            }
-
-            ++node_index;
-
-            const auto* index_type = dictionary->indexType();
-            const auto bit_width = index_type->bitWidth();
-            const bool is_signed = index_type->is_signed();
-
-            const auto deserialize_for = [&]<class T>() -> sparrow::array
-            {
-                return sparrow::array(
-                    deserialize_primitive_array<T>(
-                        record_batch,
-                        body,
-                        length,
-                        name,
-                        metadata,
-                        nullable,
-                        buffer_index
-                    )
-                );
-            };
-
-            switch (bit_width)
-            {
-                case BIT_WIDTH_8:
-                    return is_signed ? deserialize_for.template operator()<int8_t>()
-                                     : deserialize_for.template operator()<uint8_t>();
-                case BIT_WIDTH_16:
-                    return is_signed ? deserialize_for.template operator()<int16_t>()
-                                     : deserialize_for.template operator()<uint16_t>();
-                case BIT_WIDTH_32:
-                    return is_signed ? deserialize_for.template operator()<int32_t>()
-                                     : deserialize_for.template operator()<uint32_t>();
-                case BIT_WIDTH_64:
-                    return is_signed ? deserialize_for.template operator()<int64_t>()
-                                     : deserialize_for.template operator()<uint64_t>();
-                default:
-                    throw std::runtime_error(
-                        "Unsupported dictionary index bit width: " + std::to_string(bit_width)
-                    );
-            }
-        }
-    }
-
     void array_deserializer::initialize_deserializer_map()
     {
         if (!m_deserializer_map.empty())
@@ -195,10 +28,14 @@ namespace sparrow_ipc
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Int] = &deserialize_int;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::FloatingPoint] = &deserialize_float;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::FixedSizeBinary] = &deserialize_fixed_size_binary;
-        m_deserializer_map[org::apache::arrow::flatbuf::Type::Binary] = &deserialize_variable_size_binary<sparrow::binary_array>;
-        m_deserializer_map[org::apache::arrow::flatbuf::Type::LargeBinary] = &deserialize_variable_size_binary<sparrow::big_binary_array>;
-        m_deserializer_map[org::apache::arrow::flatbuf::Type::Utf8] = &deserialize_variable_size_binary<sparrow::string_array>;
-        m_deserializer_map[org::apache::arrow::flatbuf::Type::LargeUtf8] = &deserialize_variable_size_binary<sparrow::big_string_array>;
+        m_deserializer_map[org::apache::arrow::flatbuf::Type::Binary] = &deserialize_variable_size_binary<
+            sparrow::binary_array>;
+        m_deserializer_map[org::apache::arrow::flatbuf::Type::LargeBinary] = &deserialize_variable_size_binary<
+            sparrow::big_binary_array>;
+        m_deserializer_map[org::apache::arrow::flatbuf::Type::Utf8] = &deserialize_variable_size_binary<
+            sparrow::string_array>;
+        m_deserializer_map[org::apache::arrow::flatbuf::Type::LargeUtf8] = &deserialize_variable_size_binary<
+            sparrow::big_string_array>;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Interval] = &deserialize_interval;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Duration] = &deserialize_duration;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Timestamp] = &deserialize_timestamp;
@@ -206,61 +43,36 @@ namespace sparrow_ipc
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Time] = &deserialize_time;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Null] = &deserialize_null;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Decimal] = &deserialize_decimal;
-        m_deserializer_map[org::apache::arrow::flatbuf::Type::BinaryView] = &deserialize_variable_size_binary_view<sparrow::binary_view_array>;
-        m_deserializer_map[org::apache::arrow::flatbuf::Type::Utf8View] = &deserialize_variable_size_binary_view<sparrow::string_view_array>;
+        m_deserializer_map[org::apache::arrow::flatbuf::Type::BinaryView] = &deserialize_variable_size_binary_view<
+            sparrow::binary_view_array>;
+        m_deserializer_map[org::apache::arrow::flatbuf::Type::Utf8View] = &deserialize_variable_size_binary_view<
+            sparrow::string_view_array>;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::List] = &deserialize_list<sparrow::list_array>;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::LargeList] = &deserialize_list<sparrow::big_list_array>;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::FixedSizeList] = &deserialize_fixed_size_list;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::ListView] = &deserialize_list_view<sparrow::list_view_array>;
-        m_deserializer_map[org::apache::arrow::flatbuf::Type::LargeListView] = &deserialize_list_view<sparrow::big_list_view_array>;
+        m_deserializer_map[org::apache::arrow::flatbuf::Type::LargeListView] = &deserialize_list_view<
+            sparrow::big_list_view_array>;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Struct_] = &deserialize_struct;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Map] = &deserialize_map;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::RunEndEncoded] = &deserialize_run_end_encoded;
     }
 
-    sparrow::array array_deserializer::deserialize(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                  const std::span<const uint8_t>& body,
-                                                  const int64_t length,
-                                                  const std::string& name,
-                                                  const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                  bool nullable,
-                                                  size_t& buffer_index,
-                                                  size_t& node_index,
-                                                  size_t& variadic_counts_idx,
-                                                  bool decode_dictionary_indices,
-                                                  const org::apache::arrow::flatbuf::Field& field,
-                                                  const dictionary_cache* dictionaries)
+    sparrow::array array_deserializer::deserialize(
+        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+        const std::span<const uint8_t>& body,
+        const int64_t length,
+        const std::string& name,
+        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+        bool nullable,
+        size_t& buffer_index,
+        size_t& node_index,
+        size_t& variadic_counts_idx,
+        bool decode_dictionary_indices,
+        const org::apache::arrow::flatbuf::Field& field,
+        const dictionary_cache* dictionaries
+    )
     {
-        struct deserialization_context_guard
-        {
-            bool is_outermost;
-
-            explicit deserialization_context_guard(const dictionary_cache* dictionaries)
-                : is_outermost(m_deserialize_depth == 0)
-            {
-                if (is_outermost)
-                {
-                    m_active_dictionary_cache = dictionaries;
-                }
-                ++m_deserialize_depth;
-            }
-
-            ~deserialization_context_guard()
-            {
-                --m_deserialize_depth;
-                if (is_outermost)
-                {
-                    m_active_dictionary_cache = nullptr;
-                }
-            }
-        };
-
-        const deserialization_context_guard guard{dictionaries};
-
-        const dictionary_cache* cache = dictionaries != nullptr
-                                            ? dictionaries
-                                            : m_active_dictionary_cache;
-
         if (decode_dictionary_indices && field.dictionary() != nullptr)
         {
             auto indices = deserialize_dictionary_indices(
@@ -274,6 +86,8 @@ namespace sparrow_ipc
                 node_index,
                 field
             );
+
+            const dictionary_cache* cache = dictionaries != nullptr ? dictionaries : m_active_dictionary_cache;
 
             if (cache == nullptr)
             {
@@ -307,16 +121,18 @@ namespace sparrow_ipc
         );
     }
 
-    sparrow::array array_deserializer::deserialize_int(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                      const std::span<const uint8_t>& body,
-                                                      const int64_t length,
-                                                      const std::string& name,
-                                                      const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                      bool nullable,
-                                                      size_t& buffer_index,
-                                                      size_t& node_index,
-                                                      size_t& variadic_counts_idx,
-                                                      const org::apache::arrow::flatbuf::Field& field)
+    sparrow::array array_deserializer::deserialize_int(
+        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+        const std::span<const uint8_t>& body,
+        const int64_t length,
+        const std::string& name,
+        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+        bool nullable,
+        size_t& buffer_index,
+        size_t& node_index,
+        size_t& variadic_counts_idx,
+        const org::apache::arrow::flatbuf::Field& field
+    )
     {
         const auto* int_type = field.type_as_Int();
         const auto bit_width = int_type->bitWidth();
@@ -326,77 +142,226 @@ namespace sparrow_ipc
         {
             switch (bit_width)
             {
-                case BIT_WIDTH_8:  return deserialize_primitive<int8_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
-                case BIT_WIDTH_16: return deserialize_primitive<int16_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
-                case BIT_WIDTH_32: return deserialize_primitive<int32_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
-                case BIT_WIDTH_64: return deserialize_primitive<int64_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
-                default: throw std::runtime_error("Unsupported integer bit width: " + std::to_string(bit_width));
+                case sizeof(int8_t) * 8:
+                    return deserialize_primitive<int8_t>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index,
+                        node_index,
+                        variadic_counts_idx,
+                        field
+                    );
+                case sizeof(int16_t) * 8:
+                    return deserialize_primitive<int16_t>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index,
+                        node_index,
+                        variadic_counts_idx,
+                        field
+                    );
+                case sizeof(int32_t) * 8:
+                    return deserialize_primitive<int32_t>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index,
+                        node_index,
+                        variadic_counts_idx,
+                        field
+                    );
+                case sizeof(int64_t) * 8:
+                    return deserialize_primitive<int64_t>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index,
+                        node_index,
+                        variadic_counts_idx,
+                        field
+                    );
+                default:
+                    throw std::runtime_error("Unsupported integer bit width: " + std::to_string(bit_width));
             }
         }
         else
         {
             switch (bit_width)
             {
-                case BIT_WIDTH_8: return deserialize_primitive<uint8_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
-                case BIT_WIDTH_16: return deserialize_primitive<uint16_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
-                case BIT_WIDTH_32: return deserialize_primitive<uint32_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
-                case BIT_WIDTH_64: return deserialize_primitive<uint64_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
-                default: throw std::runtime_error("Unsupported integer bit width: " + std::to_string(bit_width));
+                case sizeof(uint8_t) * 8:
+                    return deserialize_primitive<uint8_t>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index,
+                        node_index,
+                        variadic_counts_idx,
+                        field
+                    );
+                case sizeof(uint16_t) * 8:
+                    return deserialize_primitive<uint16_t>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index,
+                        node_index,
+                        variadic_counts_idx,
+                        field
+                    );
+                case sizeof(uint32_t) * 8:
+                    return deserialize_primitive<uint32_t>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index,
+                        node_index,
+                        variadic_counts_idx,
+                        field
+                    );
+                case sizeof(uint64_t) * 8:
+                    return deserialize_primitive<uint64_t>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index,
+                        node_index,
+                        variadic_counts_idx,
+                        field
+                    );
+                default:
+                    throw std::runtime_error("Unsupported integer bit width: " + std::to_string(bit_width));
             }
         }
     }
 
-    sparrow::array array_deserializer::deserialize_float(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                        const std::span<const uint8_t>& body,
-                                                        const int64_t length,
-                                                        const std::string& name,
-                                                        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                        bool nullable,
-                                                        size_t& buffer_index,
-                                                        size_t& node_index,
-                                                        size_t& variadic_counts_idx,
-                                                        const org::apache::arrow::flatbuf::Field& field)
+    sparrow::array array_deserializer::deserialize_float(
+        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+        const std::span<const uint8_t>& body,
+        const int64_t length,
+        const std::string& name,
+        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+        bool nullable,
+        size_t& buffer_index,
+        size_t& node_index,
+        size_t& variadic_counts_idx,
+        const org::apache::arrow::flatbuf::Field& field
+    )
     {
         const auto* float_type = field.type_as_FloatingPoint();
         const auto precision = float_type->precision();
         switch (precision)
         {
-            case org::apache::arrow::flatbuf::Precision::HALF: return deserialize_primitive<sparrow::float16_t>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
-            case org::apache::arrow::flatbuf::Precision::SINGLE: return deserialize_primitive<float>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
-            case org::apache::arrow::flatbuf::Precision::DOUBLE: return deserialize_primitive<double>(record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field);
-            default: throw std::runtime_error("Unsupported floating point precision: " + std::to_string(static_cast<int>(precision)));
+            case org::apache::arrow::flatbuf::Precision::HALF:
+                return deserialize_primitive<sparrow::float16_t>(
+                    record_batch,
+                    body,
+                    length,
+                    name,
+                    metadata,
+                    nullable,
+                    buffer_index,
+                    node_index,
+                    variadic_counts_idx,
+                    field
+                );
+            case org::apache::arrow::flatbuf::Precision::SINGLE:
+                return deserialize_primitive<float>(
+                    record_batch,
+                    body,
+                    length,
+                    name,
+                    metadata,
+                    nullable,
+                    buffer_index,
+                    node_index,
+                    variadic_counts_idx,
+                    field
+                );
+            case org::apache::arrow::flatbuf::Precision::DOUBLE:
+                return deserialize_primitive<double>(
+                    record_batch,
+                    body,
+                    length,
+                    name,
+                    metadata,
+                    nullable,
+                    buffer_index,
+                    node_index,
+                    variadic_counts_idx,
+                    field
+                );
+            default:
+                throw std::runtime_error(
+                    "Unsupported floating point precision: " + std::to_string(static_cast<int>(precision))
+                );
         }
     }
 
-    sparrow::array array_deserializer::deserialize_fixed_size_binary(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                 const std::span<const uint8_t>& body,
-                                                 const int64_t length,
-                                                 const std::string& name,
-                                                 const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                 bool nullable,
-                                                 size_t& buffer_index,
-                                                 size_t& node_index,
-                                                 size_t& /*variadic_counts_idx*/,
-                                                 const org::apache::arrow::flatbuf::Field& field)
+    sparrow::array array_deserializer::deserialize_fixed_size_binary(
+        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+        const std::span<const uint8_t>& body,
+        const int64_t length,
+        const std::string& name,
+        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+        bool nullable,
+        size_t& buffer_index,
+        size_t& node_index,
+        size_t& /*variadic_counts_idx*/,
+        const org::apache::arrow::flatbuf::Field& field
+    )
     {
         ++node_index;  // Consume one FieldNode for this fixed-size binary array
         const auto* fixed_size_binary_field = field.type_as_FixedSizeBinary();
         return sparrow::array(deserialize_fixed_width_binary_array(
-            record_batch, body, length, name, metadata, nullable, buffer_index,
+            record_batch,
+            body,
+            length,
+            name,
+            metadata,
+            nullable,
+            buffer_index,
             fixed_size_binary_field->byteWidth()
         ));
     }
 
-    sparrow::array array_deserializer::deserialize_decimal(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                          const std::span<const uint8_t>& body,
-                                                          const int64_t length,
-                                                          const std::string& name,
-                                                          const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                          bool nullable,
-                                                          size_t& buffer_index,
-                                                          size_t& node_index,
-                                                          size_t& /*variadic_counts_idx*/,
-                                                          const org::apache::arrow::flatbuf::Field& field)
+    sparrow::array array_deserializer::deserialize_decimal(
+        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+        const std::span<const uint8_t>& body,
+        const int64_t length,
+        const std::string& name,
+        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+        bool nullable,
+        size_t& buffer_index,
+        size_t& node_index,
+        size_t& /*variadic_counts_idx*/,
+        const org::apache::arrow::flatbuf::Field& field
+    )
     {
         ++node_index;  // Consume one FieldNode for this decimal array
         const auto* decimal_field = field.type_as_Decimal();
@@ -406,146 +371,328 @@ namespace sparrow_ipc
         switch (bit_width)
         {
             case 32:
-                return sparrow::array(deserialize_decimal_array<sparrow::decimal<int32_t>>(
-                    record_batch, body, length, name, metadata, nullable, buffer_index, scale, precision
-                ));
+                return sparrow::array(
+                    deserialize_decimal_array<sparrow::decimal<int32_t>>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index,
+                        scale,
+                        precision
+                    )
+                );
             case 64:
-                return sparrow::array(deserialize_decimal_array<sparrow::decimal<int64_t>>(
-                    record_batch, body, length, name, metadata, nullable, buffer_index, scale, precision
-                ));
+                return sparrow::array(
+                    deserialize_decimal_array<sparrow::decimal<int64_t>>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index,
+                        scale,
+                        precision
+                    )
+                );
             case 128:
-                return sparrow::array(deserialize_decimal_array<sparrow::decimal<sparrow::int128_t>>(
-                    record_batch, body, length, name, metadata, nullable, buffer_index, scale, precision
-                ));
+                return sparrow::array(
+                    deserialize_decimal_array<sparrow::decimal<sparrow::int128_t>>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index,
+                        scale,
+                        precision
+                    )
+                );
             case 256:
-                return sparrow::array(deserialize_decimal_array<sparrow::decimal<sparrow::int256_t>>(
-                    record_batch, body, length, name, metadata, nullable, buffer_index, scale, precision
-                ));
+                return sparrow::array(
+                    deserialize_decimal_array<sparrow::decimal<sparrow::int256_t>>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index,
+                        scale,
+                        precision
+                    )
+                );
             default:
                 throw std::runtime_error("Unsupported decimal bit width: " + std::to_string(bit_width));
         }
     }
 
-    sparrow::array array_deserializer::deserialize_null(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                       const std::span<const uint8_t>& body,
-                                                       const int64_t length,
-                                                       const std::string& name,
-                                                       const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                       bool nullable,
-                                                       size_t& buffer_index,
-                                                       size_t& node_index,
-                                                       size_t& /*variadic_counts_idx*/,
-                                                       const org::apache::arrow::flatbuf::Field&)
+    sparrow::array array_deserializer::deserialize_null(
+        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+        const std::span<const uint8_t>& body,
+        const int64_t length,
+        const std::string& name,
+        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+        bool nullable,
+        size_t& buffer_index,
+        size_t& node_index,
+        size_t& /*variadic_counts_idx*/,
+        const org::apache::arrow::flatbuf::Field&
+    )
     {
         ++node_index;  // Consume one FieldNode for this null array
-        return sparrow::array(deserialize_null_array(
-            record_batch, body, length, name, metadata, nullable, buffer_index
-        ));
+        return sparrow::array(
+            deserialize_null_array(record_batch, body, length, name, metadata, nullable, buffer_index)
+        );
     }
 
-    sparrow::array array_deserializer::deserialize_date(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                       const std::span<const uint8_t>& body,
-                                                       const int64_t length,
-                                                       const std::string& name,
-                                                       const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                       bool nullable,
-                                                       size_t& buffer_index,
-                                                       size_t& node_index,
-                                                       size_t& /*variadic_counts_idx*/,
-                                                       const org::apache::arrow::flatbuf::Field& field)
+    sparrow::array array_deserializer::deserialize_date(
+        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+        const std::span<const uint8_t>& body,
+        const int64_t length,
+        const std::string& name,
+        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+        bool nullable,
+        size_t& buffer_index,
+        size_t& node_index,
+        size_t& /*variadic_counts_idx*/,
+        const org::apache::arrow::flatbuf::Field& field
+    )
     {
         ++node_index;  // Consume one FieldNode for this date array
         const auto date_type = field.type_as_Date();
         const auto date_unit = date_type->unit();
         switch (date_unit)
         {
-            case org::apache::arrow::flatbuf::DateUnit::DAY: return sparrow::array(deserialize_date_array<sparrow::date_days>(record_batch, body, length, name, metadata, nullable, buffer_index));
-            case org::apache::arrow::flatbuf::DateUnit::MILLISECOND: return sparrow::array(deserialize_date_array<sparrow::date_milliseconds>(record_batch, body, length, name, metadata, nullable, buffer_index));
-            default: throw std::runtime_error("Unsupported date unit: " + std::to_string(static_cast<int>(date_unit)));
+            case org::apache::arrow::flatbuf::DateUnit::DAY:
+                return sparrow::array(
+                    deserialize_date_array<
+                        sparrow::date_days>(record_batch, body, length, name, metadata, nullable, buffer_index)
+                );
+            case org::apache::arrow::flatbuf::DateUnit::MILLISECOND:
+                return sparrow::array(
+                    deserialize_date_array<sparrow::date_milliseconds>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index
+                    )
+                );
+            default:
+                throw std::runtime_error("Unsupported date unit: " + std::to_string(static_cast<int>(date_unit)));
         }
     }
 
-    sparrow::array array_deserializer::deserialize_interval(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                           const std::span<const uint8_t>& body,
-                                                           const int64_t length,
-                                                           const std::string& name,
-                                                           const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                           bool nullable,
-                                                           size_t& buffer_index,
-                                                           size_t& node_index,
-                                                           size_t& /*variadic_counts_idx*/,
-                                                           const org::apache::arrow::flatbuf::Field& field)
+    sparrow::array array_deserializer::deserialize_interval(
+        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+        const std::span<const uint8_t>& body,
+        const int64_t length,
+        const std::string& name,
+        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+        bool nullable,
+        size_t& buffer_index,
+        size_t& node_index,
+        size_t& /*variadic_counts_idx*/,
+        const org::apache::arrow::flatbuf::Field& field
+    )
     {
         ++node_index;  // Consume one FieldNode for this interval array
         const auto* interval_type = field.type_as_Interval();
         const org::apache::arrow::flatbuf::IntervalUnit interval_unit = interval_type->unit();
         switch (interval_unit)
         {
-            case org::apache::arrow::flatbuf::IntervalUnit::YEAR_MONTH: return sparrow::array(deserialize_interval_array<sparrow::chrono::months>(record_batch, body, length, name, metadata, nullable, buffer_index));
-            case org::apache::arrow::flatbuf::IntervalUnit::DAY_TIME: return sparrow::array(deserialize_interval_array<sparrow::days_time_interval>(record_batch, body, length, name, metadata, nullable, buffer_index));
-            case org::apache::arrow::flatbuf::IntervalUnit::MONTH_DAY_NANO: return sparrow::array(deserialize_interval_array<sparrow::month_day_nanoseconds_interval>(record_batch, body, length, name, metadata, nullable, buffer_index));
-            default: throw std::runtime_error("Unsupported interval unit: " + std::to_string(static_cast<int>(interval_unit)));
+            case org::apache::arrow::flatbuf::IntervalUnit::YEAR_MONTH:
+                return sparrow::array(
+                    deserialize_interval_array<
+                        sparrow::chrono::months>(record_batch, body, length, name, metadata, nullable, buffer_index)
+                );
+            case org::apache::arrow::flatbuf::IntervalUnit::DAY_TIME:
+                return sparrow::array(
+                    deserialize_interval_array<sparrow::days_time_interval>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index
+                    )
+                );
+            case org::apache::arrow::flatbuf::IntervalUnit::MONTH_DAY_NANO:
+                return sparrow::array(
+                    deserialize_interval_array<sparrow::month_day_nanoseconds_interval>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index
+                    )
+                );
+            default:
+                throw std::runtime_error(
+                    "Unsupported interval unit: " + std::to_string(static_cast<int>(interval_unit))
+                );
         }
     }
 
-    sparrow::array array_deserializer::deserialize_duration(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                           const std::span<const uint8_t>& body,
-                                                           const int64_t length,
-                                                           const std::string& name,
-                                                           const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                           bool nullable,
-                                                           size_t& buffer_index,
-                                                           size_t& node_index,
-                                                           size_t& /*variadic_counts_idx*/,
-                                                           const org::apache::arrow::flatbuf::Field& field)
+    sparrow::array array_deserializer::deserialize_duration(
+        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+        const std::span<const uint8_t>& body,
+        const int64_t length,
+        const std::string& name,
+        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+        bool nullable,
+        size_t& buffer_index,
+        size_t& node_index,
+        size_t& /*variadic_counts_idx*/,
+        const org::apache::arrow::flatbuf::Field& field
+    )
     {
         ++node_index;  // Consume one FieldNode for this duration array
         const auto* duration_type = field.type_as_Duration();
         const org::apache::arrow::flatbuf::TimeUnit time_unit = duration_type->unit();
         switch (time_unit)
         {
-            case org::apache::arrow::flatbuf::TimeUnit::SECOND: return sparrow::array(deserialize_duration_array<std::chrono::seconds>(record_batch, body, length, name, metadata, nullable, buffer_index));
-            case org::apache::arrow::flatbuf::TimeUnit::MILLISECOND: return sparrow::array(deserialize_duration_array<std::chrono::milliseconds>(record_batch, body, length, name, metadata, nullable, buffer_index));
-            case org::apache::arrow::flatbuf::TimeUnit::MICROSECOND: return sparrow::array(deserialize_duration_array<std::chrono::microseconds>(record_batch, body, length, name, metadata, nullable, buffer_index));
-            case org::apache::arrow::flatbuf::TimeUnit::NANOSECOND: return sparrow::array(deserialize_duration_array<std::chrono::nanoseconds>(record_batch, body, length, name, metadata, nullable, buffer_index));
-            default: throw std::runtime_error("Unsupported duration time unit: " + std::to_string(static_cast<int>(time_unit)));
+            case org::apache::arrow::flatbuf::TimeUnit::SECOND:
+                return sparrow::array(
+                    deserialize_duration_array<
+                        std::chrono::seconds>(record_batch, body, length, name, metadata, nullable, buffer_index)
+                );
+            case org::apache::arrow::flatbuf::TimeUnit::MILLISECOND:
+                return sparrow::array(
+                    deserialize_duration_array<std::chrono::milliseconds>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index
+                    )
+                );
+            case org::apache::arrow::flatbuf::TimeUnit::MICROSECOND:
+                return sparrow::array(
+                    deserialize_duration_array<std::chrono::microseconds>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index
+                    )
+                );
+            case org::apache::arrow::flatbuf::TimeUnit::NANOSECOND:
+                return sparrow::array(
+                    deserialize_duration_array<std::chrono::nanoseconds>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index
+                    )
+                );
+            default:
+                throw std::runtime_error(
+                    "Unsupported duration time unit: " + std::to_string(static_cast<int>(time_unit))
+                );
         }
     }
 
-    sparrow::array array_deserializer::deserialize_time(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                       const std::span<const uint8_t>& body,
-                                                       const int64_t length,
-                                                       const std::string& name,
-                                                       const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                       bool nullable,
-                                                       size_t& buffer_index,
-                                                       size_t& node_index,
-                                                       size_t& /*variadic_counts_idx*/,
-                                                       const org::apache::arrow::flatbuf::Field& field)
+    sparrow::array array_deserializer::deserialize_time(
+        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+        const std::span<const uint8_t>& body,
+        const int64_t length,
+        const std::string& name,
+        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+        bool nullable,
+        size_t& buffer_index,
+        size_t& node_index,
+        size_t& /*variadic_counts_idx*/,
+        const org::apache::arrow::flatbuf::Field& field
+    )
     {
         ++node_index;  // Consume one FieldNode for this time array
         const auto time_type = field.type_as_Time();
         const auto time_unit = time_type->unit();
         switch (time_unit)
         {
-            case org::apache::arrow::flatbuf::TimeUnit::SECOND: return sparrow::array(deserialize_time_array<sparrow::chrono::time_seconds>(record_batch, body, length, name, metadata, nullable, buffer_index));
-            case org::apache::arrow::flatbuf::TimeUnit::MILLISECOND: return sparrow::array(deserialize_time_array<sparrow::chrono::time_milliseconds>(record_batch, body, length, name, metadata, nullable, buffer_index));
-            case org::apache::arrow::flatbuf::TimeUnit::MICROSECOND: return sparrow::array(deserialize_time_array<sparrow::chrono::time_microseconds>(record_batch, body, length, name, metadata, nullable, buffer_index));
-            case org::apache::arrow::flatbuf::TimeUnit::NANOSECOND: return sparrow::array(deserialize_time_array<sparrow::chrono::time_nanoseconds>(record_batch, body, length, name, metadata, nullable, buffer_index));
-            default: throw std::runtime_error("Unsupported time unit: " + std::to_string(static_cast<int>(time_unit)));
+            case org::apache::arrow::flatbuf::TimeUnit::SECOND:
+                return sparrow::array(
+                    deserialize_time_array<sparrow::chrono::time_seconds>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index
+                    )
+                );
+            case org::apache::arrow::flatbuf::TimeUnit::MILLISECOND:
+                return sparrow::array(
+                    deserialize_time_array<sparrow::chrono::time_milliseconds>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index
+                    )
+                );
+            case org::apache::arrow::flatbuf::TimeUnit::MICROSECOND:
+                return sparrow::array(
+                    deserialize_time_array<sparrow::chrono::time_microseconds>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index
+                    )
+                );
+            case org::apache::arrow::flatbuf::TimeUnit::NANOSECOND:
+                return sparrow::array(
+                    deserialize_time_array<sparrow::chrono::time_nanoseconds>(
+                        record_batch,
+                        body,
+                        length,
+                        name,
+                        metadata,
+                        nullable,
+                        buffer_index
+                    )
+                );
+            default:
+                throw std::runtime_error("Unsupported time unit: " + std::to_string(static_cast<int>(time_unit)));
         }
     }
 
-    sparrow::array array_deserializer::deserialize_timestamp(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                            const std::span<const uint8_t>& body,
-                                                            const int64_t length,
-                                                            const std::string& name,
-                                                            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                            bool nullable,
-                                                            size_t& buffer_index,
-                                                            size_t& node_index,
-                                                            size_t& /*variadic_counts_idx*/,
-                                                            const org::apache::arrow::flatbuf::Field& field)
+    sparrow::array array_deserializer::deserialize_timestamp(
+        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+        const std::span<const uint8_t>& body,
+        const int64_t length,
+        const std::string& name,
+        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+        bool nullable,
+        size_t& buffer_index,
+        size_t& node_index,
+        size_t& /*variadic_counts_idx*/,
+        const org::apache::arrow::flatbuf::Field& field
+    )
     {
         ++node_index;  // Consume one FieldNode for this timestamp array
         const auto timestamp_type = field.type_as_Timestamp();
@@ -558,15 +705,61 @@ namespace sparrow_ipc
             switch (time_unit)
             {
                 case org::apache::arrow::flatbuf::TimeUnit::SECOND:
-                    return sparrow::array(deserialize_timestamp_array<sparrow::timestamp_second>(record_batch, body, length, name, metadata, nullable, buffer_index, timezone));
+                    return sparrow::array(
+                        deserialize_timestamp_array<sparrow::timestamp_second>(
+                            record_batch,
+                            body,
+                            length,
+                            name,
+                            metadata,
+                            nullable,
+                            buffer_index,
+                            timezone
+                        )
+                    );
                 case org::apache::arrow::flatbuf::TimeUnit::MILLISECOND:
-                    return sparrow::array(deserialize_timestamp_array<sparrow::timestamp_millisecond>(record_batch, body, length, name, metadata, nullable, buffer_index, timezone));
+                    return sparrow::array(
+                        deserialize_timestamp_array<sparrow::timestamp_millisecond>(
+                            record_batch,
+                            body,
+                            length,
+                            name,
+                            metadata,
+                            nullable,
+                            buffer_index,
+                            timezone
+                        )
+                    );
                 case org::apache::arrow::flatbuf::TimeUnit::MICROSECOND:
-                    return sparrow::array(deserialize_timestamp_array<sparrow::timestamp_microsecond>(record_batch, body, length, name, metadata, nullable, buffer_index, timezone));
+                    return sparrow::array(
+                        deserialize_timestamp_array<sparrow::timestamp_microsecond>(
+                            record_batch,
+                            body,
+                            length,
+                            name,
+                            metadata,
+                            nullable,
+                            buffer_index,
+                            timezone
+                        )
+                    );
                 case org::apache::arrow::flatbuf::TimeUnit::NANOSECOND:
-                    return sparrow::array(deserialize_timestamp_array<sparrow::timestamp_nanosecond>(record_batch, body, length, name, metadata, nullable, buffer_index, timezone));
+                    return sparrow::array(
+                        deserialize_timestamp_array<sparrow::timestamp_nanosecond>(
+                            record_batch,
+                            body,
+                            length,
+                            name,
+                            metadata,
+                            nullable,
+                            buffer_index,
+                            timezone
+                        )
+                    );
                 default:
-                    throw std::runtime_error("Unsupported timestamp unit: " + std::to_string(static_cast<int>(time_unit)));
+                    throw std::runtime_error(
+                        "Unsupported timestamp unit: " + std::to_string(static_cast<int>(time_unit))
+                    );
             }
         }
         else
@@ -574,20 +767,63 @@ namespace sparrow_ipc
             switch (time_unit)
             {
                 case org::apache::arrow::flatbuf::TimeUnit::SECOND:
-                    return sparrow::array(deserialize_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_seconds>(record_batch, body, length, name, metadata, nullable, buffer_index));
+                    return sparrow::array(
+                        deserialize_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_seconds>(
+                            record_batch,
+                            body,
+                            length,
+                            name,
+                            metadata,
+                            nullable,
+                            buffer_index
+                        )
+                    );
                 case org::apache::arrow::flatbuf::TimeUnit::MILLISECOND:
-                    return sparrow::array(deserialize_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_milliseconds>(record_batch, body, length, name, metadata, nullable, buffer_index));
+                    return sparrow::array(
+                        deserialize_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_milliseconds>(
+                            record_batch,
+                            body,
+                            length,
+                            name,
+                            metadata,
+                            nullable,
+                            buffer_index
+                        )
+                    );
                 case org::apache::arrow::flatbuf::TimeUnit::MICROSECOND:
-                    return sparrow::array(deserialize_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_microseconds>(record_batch, body, length, name, metadata, nullable, buffer_index));
+                    return sparrow::array(
+                        deserialize_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_microseconds>(
+                            record_batch,
+                            body,
+                            length,
+                            name,
+                            metadata,
+                            nullable,
+                            buffer_index
+                        )
+                    );
                 case org::apache::arrow::flatbuf::TimeUnit::NANOSECOND:
-                    return sparrow::array(deserialize_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_nanoseconds>(record_batch, body, length, name, metadata, nullable, buffer_index));
+                    return sparrow::array(
+                        deserialize_timestamp_without_timezone_array<sparrow::zoned_time_without_timezone_nanoseconds>(
+                            record_batch,
+                            body,
+                            length,
+                            name,
+                            metadata,
+                            nullable,
+                            buffer_index
+                        )
+                    );
                 default:
-                    throw std::runtime_error("Unsupported timestamp unit: " + std::to_string(static_cast<int>(time_unit)));
+                    throw std::runtime_error(
+                        "Unsupported timestamp unit: " + std::to_string(static_cast<int>(time_unit))
+                    );
             }
         }
     }
 
-    // Implementation of list related arrays (present here because of recursive call to array_deserializer::deserialize)
+    // Implementation of list related arrays (present here because of recursive call to
+    // array_deserializer::deserialize)
     namespace
     {
         [[nodiscard]] sparrow::fixed_sized_list_array deserialize_fixed_size_list_array(
@@ -600,7 +836,8 @@ namespace sparrow_ipc
             size_t& buffer_index,
             size_t& node_index,
             size_t& variadic_counts_idx,
-            const org::apache::arrow::flatbuf::Field& field)
+            const org::apache::arrow::flatbuf::Field& field
+        )
         {
             ++node_index;  // Consume one FieldNode for this fixed-size list array
             std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
@@ -657,26 +894,22 @@ namespace sparrow_ipc
 
             const std::string format = "+w:" + std::to_string(list_size);
             const auto null_count = std::visit(
-                [length](const auto& arg) {
+                [length](const auto& arg)
+                {
                     std::span<const uint8_t> span(arg.data(), arg.size());
                     return utils::get_bitmap_pointer_and_null_count(span, length).second;
                 },
                 buffers[0]
             );
 
-            auto [child_arrow_array, child_arrow_schema] = sparrow::extract_arrow_structures(std::move(child_array));
+            auto [child_arrow_array, child_arrow_schema] = sparrow::extract_arrow_structures(
+                std::move(child_array)
+            );
 
             auto** schema_children = new ArrowSchema*[1];
             schema_children[0] = new ArrowSchema(std::move(child_arrow_schema));
-            ArrowSchema schema = make_non_owning_arrow_schema(
-                format,
-                name,
-                metadata,
-                flags,
-                1,
-                schema_children,
-                nullptr
-            );
+            ArrowSchema
+                schema = make_non_owning_arrow_schema(format, name, metadata, flags, 1, schema_children, nullptr);
 
             auto** array_children = new ArrowArray*[1];
             array_children[0] = new ArrowArray(std::move(child_arrow_array));
@@ -704,7 +937,8 @@ namespace sparrow_ipc
             size_t& buffer_index,
             size_t& node_index,
             size_t& variadic_counts_idx,
-            const org::apache::arrow::flatbuf::Field& field)
+            const org::apache::arrow::flatbuf::Field& field
+        )
         {
             ++node_index;  // Consume one FieldNode for this struct array
             std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
@@ -742,35 +976,38 @@ namespace sparrow_ipc
                     child_metadata = to_sparrow_metadata(*child_field->custom_metadata());
                 }
 
-                child_arrays.push_back(array_deserializer::deserialize(
-                    record_batch,
-                    body,
-                    length,
-                    child_field->name()->str(),
-                    child_metadata,
-                    child_field->nullable(),
-                    buffer_index,
-                    node_index,
-                    variadic_counts_idx,
-                    true,
-                    *child_field
-                ));
+                child_arrays.push_back(
+                    array_deserializer::deserialize(
+                        record_batch,
+                        body,
+                        length,
+                        child_field->name()->str(),
+                        child_metadata,
+                        child_field->nullable(),
+                        buffer_index,
+                        node_index,
+                        variadic_counts_idx,
+                        true,
+                        *child_field
+                    )
+                );
             }
 
-            const std::string_view format = sparrow::data_type_to_format(sparrow::detail::get_data_type_from_array<sparrow::struct_array>::get());
+            const std::string_view format = sparrow::data_type_to_format(
+                sparrow::detail::get_data_type_from_array<sparrow::struct_array>::get()
+            );
 
             const size_t n_child_arrays = child_arrays.size();
 
             auto** schema_children = new ArrowSchema*[n_child_arrays];
-            auto** array_children  = new ArrowArray*[n_child_arrays];
+            auto** array_children = new ArrowArray*[n_child_arrays];
 
             for (size_t i = 0; i < n_child_arrays; ++i)
             {
-                auto [arr, schema] =
-                    sparrow::extract_arrow_structures(std::move(child_arrays[i]));
+                auto [arr, schema] = sparrow::extract_arrow_structures(std::move(child_arrays[i]));
 
                 schema_children[i] = new ArrowSchema(std::move(schema));
-                array_children[i]  = new ArrowArray(std::move(arr));
+                array_children[i] = new ArrowArray(std::move(arr));
             }
 
             ArrowSchema schema = make_non_owning_arrow_schema(
@@ -784,7 +1021,8 @@ namespace sparrow_ipc
             );
 
             const auto null_count = std::visit(
-                [length](const auto& arg) {
+                [length](const auto& arg)
+                {
                     std::span<const uint8_t> span(arg.data(), arg.size());
                     return utils::get_bitmap_pointer_and_null_count(span, length).second;
                 },
@@ -816,44 +1054,10 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& variadic_counts_idx,
-        const org::apache::arrow::flatbuf::Field& field)
+        const org::apache::arrow::flatbuf::Field& field
+    )
     {
         return sparrow::array(deserialize_fixed_size_list_array(
-            record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field
-        ));
-    }
-
-    sparrow::array array_deserializer::deserialize_struct(
-        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-        const std::span<const uint8_t>& body,
-        const int64_t length,
-        const std::string& name,
-        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-        bool nullable,
-        size_t& buffer_index,
-        size_t& node_index,
-        size_t& variadic_counts_idx,
-        const org::apache::arrow::flatbuf::Field& field)
-    {
-        return sparrow::array(deserialize_struct_array(
-            record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field
-        ));
-    }
-
-    sparrow::array array_deserializer::deserialize_map(
-        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-        const std::span<const uint8_t>& body,
-        const int64_t length,
-        const std::string& name,
-        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-        bool nullable,
-        size_t& buffer_index,
-        size_t& node_index,
-        size_t& variadic_counts_idx,
-        const org::apache::arrow::flatbuf::Field& field)
-    {
-        // TODO handle the keyssorted in flags (needs a custom test) when true
-        return sparrow::array(array_deserializer::deserialize_list_array<sparrow::map_array>(
             record_batch,
             body,
             length,
@@ -867,6 +1071,63 @@ namespace sparrow_ipc
         ));
     }
 
+    sparrow::array array_deserializer::deserialize_struct(
+        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+        const std::span<const uint8_t>& body,
+        const int64_t length,
+        const std::string& name,
+        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+        bool nullable,
+        size_t& buffer_index,
+        size_t& node_index,
+        size_t& variadic_counts_idx,
+        const org::apache::arrow::flatbuf::Field& field
+    )
+    {
+        return sparrow::array(deserialize_struct_array(
+            record_batch,
+            body,
+            length,
+            name,
+            metadata,
+            nullable,
+            buffer_index,
+            node_index,
+            variadic_counts_idx,
+            field
+        ));
+    }
+
+    sparrow::array array_deserializer::deserialize_map(
+        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+        const std::span<const uint8_t>& body,
+        const int64_t length,
+        const std::string& name,
+        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+        bool nullable,
+        size_t& buffer_index,
+        size_t& node_index,
+        size_t& variadic_counts_idx,
+        const org::apache::arrow::flatbuf::Field& field
+    )
+    {
+        // TODO handle the keyssorted in flags (needs a custom test) when true
+        return sparrow::array(
+            array_deserializer::deserialize_list_array<sparrow::map_array>(
+                record_batch,
+                body,
+                length,
+                name,
+                metadata,
+                nullable,
+                buffer_index,
+                node_index,
+                variadic_counts_idx,
+                field
+            )
+        );
+    }
+
     sparrow::array array_deserializer::deserialize_run_end_encoded(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         const std::span<const uint8_t>& body,
@@ -877,7 +1138,8 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& variadic_counts_idx,
-        const org::apache::arrow::flatbuf::Field& field)
+        const org::apache::arrow::flatbuf::Field& field
+    )
     {
         return sparrow::array(deserialize_run_end_encoded_array(
             record_batch,

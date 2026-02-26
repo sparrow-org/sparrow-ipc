@@ -1,23 +1,15 @@
-// Copyright 2024 Man Group Operations Limited
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include "sparrow_ipc/dictionary_cache.hpp"
 
+#include <algorithm>
+#include <iterator>
+#include <ranges>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 #include <sparrow/layout/array_access.hpp>
 #include <sparrow/primitive_array.hpp>
+#include <sparrow/utils/nullable.hpp>
 #include <sparrow/variable_size_binary_array.hpp>
 #include <sparrow/arrow_interface/arrow_array_schema_utils.hpp>
 
@@ -31,19 +23,12 @@ namespace sparrow_ipc
             const auto lhs_proxy = sparrow::detail::array_access::get_arrow_proxy(lhs);
             const auto rhs_proxy = sparrow::detail::array_access::get_arrow_proxy(rhs);
 
-            auto merged = sparrow::primitive_array<T>(std::vector<T>{});
+            
             const auto lhs_typed = sparrow::primitive_array<T>(lhs_proxy);
             const auto rhs_typed = sparrow::primitive_array<T>(rhs_proxy);
 
-            for (const auto& value : lhs_typed)
-            {
-                merged.push_back(value);
-            }
-
-            for (const auto& value : rhs_typed)
-            {
-                merged.push_back(value);
-            }
+            auto merged = sparrow::primitive_array<T>(lhs_typed);
+            merged.insert(merged.cend(), rhs_typed.cbegin(), rhs_typed.cend());
             return sparrow::array(std::move(merged));
         }
 
@@ -56,36 +41,26 @@ namespace sparrow_ipc
             const auto lhs_typed = StringArray(lhs_proxy);
             const auto rhs_typed = StringArray(rhs_proxy);
 
-            std::vector<std::string> merged_values;
+            std::vector<sparrow::nullable<std::string>> merged_values;
             merged_values.reserve(lhs_typed.size() + rhs_typed.size());
 
-            for (const auto& value : lhs_typed)
+            const auto to_nullable_string = [](const auto& value) -> sparrow::nullable<std::string>
             {
                 if (value.has_value())
                 {
-                    merged_values.emplace_back(value.value());
+                    return sparrow::nullable<std::string>(std::string(value.value()));
                 }
-                else
-                {
-                    throw std::runtime_error(
-                        "Delta dictionary update with null string values is not supported"
-                    );
-                }
-            }
+                return sparrow::nullable<std::string>();
+            };
 
-            for (const auto& value : rhs_typed)
-            {
-                if (value.has_value())
-                {
-                    merged_values.emplace_back(value.value());
-                }
-                else
-                {
-                    throw std::runtime_error(
-                        "Delta dictionary update with null string values is not supported"
-                    );
-                }
-            }
+            std::ranges::copy(
+                lhs_typed | std::views::transform(to_nullable_string),
+                std::back_inserter(merged_values)
+            );
+            std::ranges::copy(
+                rhs_typed | std::views::transform(to_nullable_string),
+                std::back_inserter(merged_values)
+            );
 
             auto merged = StringArray(merged_values);
             return sparrow::array(std::move(merged));
@@ -135,16 +110,6 @@ namespace sparrow_ipc
                     );
             }
         }
-
-        std::vector<std::string> copy_names(const sparrow::record_batch& batch)
-        {
-            std::vector<std::string> names;
-            for (std::string_view name : batch.names())
-            {
-                names.emplace_back(name);
-            }
-            return names;
-        }
     }
 
     void dictionary_cache::store_dictionary(int64_t id, sparrow::record_batch batch, bool is_delta)
@@ -170,15 +135,9 @@ namespace sparrow_ipc
                     batch.get_column(0)
                 );
 
-                std::vector<std::string> merged_names = copy_names(existing_batch);
-                if (merged_names.empty())
-                {
-                    merged_names = copy_names(batch);
-                }
-
                 std::vector<sparrow::array> merged_columns;
                 merged_columns.emplace_back(merged_values);
-                it->second = sparrow::record_batch(std::move(merged_names), std::move(merged_columns));
+                it->second = sparrow::record_batch(existing_batch.names(), std::move(merged_columns));
                 return;
             }
         }

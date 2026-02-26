@@ -1,9 +1,5 @@
-#include <filesystem>
-#include <fstream>
-#include <iterator>
-#include <vector>
-
 #include "doctest/doctest.h"
+#include "test_helper.hpp"
 
 #include <sparrow/dictionary_encoded_array.hpp>
 #include <sparrow/variable_size_binary_array.hpp>
@@ -16,21 +12,6 @@
 #include "sparrow_ipc/serialize.hpp"
 #include "sparrow_ipc/serializer.hpp"
 #include "sparrow_ipc/stream_file_serializer.hpp"
-
-namespace
-{
-    const std::filesystem::path arrow_testing_data_dir = ARROW_TESTING_DATA_DIR;
-
-    const std::filesystem::path dictionary_fixture_base =
-        arrow_testing_data_dir / "data" / "arrow-ipc-stream" / "integration" / "cpp-21.0.0" / "generated_dictionary";
-
-    std::vector<uint8_t> read_binary_file(const std::filesystem::path& file_path)
-    {
-        std::ifstream file(file_path, std::ios::binary);
-        REQUIRE(file.is_open());
-        return std::vector<uint8_t>((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    }
-}
 
 TEST_SUITE("Dictionary support")
 {

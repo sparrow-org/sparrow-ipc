@@ -24,9 +24,9 @@ namespace sparrow_ipc
      */
     struct record_batch_block
     {
-        int64_t offset;          ///< Offset from the start of the file to the record batch message
-        int32_t metadata_length; ///< Length of the metadata (FlatBuffer message)
-        int64_t body_length;     ///< Length of the record batch body (data buffers)
+        int64_t offset;           ///< Offset from the start of the file to the record batch message
+        int32_t metadata_length;  ///< Length of the metadata (FlatBuffer message)
+        int64_t body_length;      ///< Length of the record batch body (data buffers)
     };
 
     /**
@@ -43,7 +43,7 @@ namespace sparrow_ipc
         const std::vector<record_batch_block>& record_batch_blocks,
         any_output_stream& stream
     );
-    
+
     /**
      * @brief Deserializes Arrow IPC file format into a vector of record batches.
      *
@@ -71,9 +71,9 @@ namespace sparrow_ipc
     /**
      * @brief A class for serializing Apache Arrow record batches to the IPC file format.
      *
-     * The stream_file_serializer class provides functionality to serialize single or multiple 
-     * record batches into the Arrow IPC file format suitable for storage. It ensures schema 
-     * consistency across multiple record batches and optimizes memory allocation by 
+     * The stream_file_serializer class provides functionality to serialize single or multiple
+     * record batches into the Arrow IPC file format suitable for storage. It ensures schema
+     * consistency across multiple record batches and optimizes memory allocation by
      * pre-calculating required buffer sizes.
      *
      * @details The stream_file_serializer follows the Arrow IPC file format specification:
@@ -104,7 +104,8 @@ namespace sparrow_ipc
          */
         template <writable_stream TStream>
         stream_file_serializer(TStream& stream, std::optional<CompressionType> compression = std::nullopt)
-            : m_stream(stream), m_compression(compression)
+            : m_stream(stream)
+            , m_compression(compression)
         {
         }
 
@@ -169,7 +170,8 @@ namespace sparrow_ipc
             }
 
             // NOTE `reserve_function` is making us store a cache for the compressed buffers at this level.
-            // The benefit of capacity allocation should be evaluated vs storing a cache of compressed buffers of record batches.
+            // The benefit of capacity allocation should be evaluated vs storing a cache of compressed buffers
+            // of record batches.
             const auto reserve_function = [&record_batches, &compressed_buffers_cache, this]()
             {
                 return std::accumulate(
@@ -189,9 +191,12 @@ namespace sparrow_ipc
                                    );
                                }
 
-                               return acc
-                                      + dictionaries_size
-                                      + calculate_record_batch_message_size(rb, m_compression, compressed_buffers_cache);
+                               return acc + dictionaries_size
+                                      + calculate_record_batch_message_size(
+                                          rb,
+                                          m_compression,
+                                          compressed_buffers_cache
+                                      );
                            }
                        )
                        + (m_schema_received ? 0 : calculate_schema_message_size(*record_batches.begin()));
@@ -216,6 +221,7 @@ namespace sparrow_ipc
 
                 // Emit dictionary batches before the record batch
                 auto dictionaries = m_dict_tracker.extract_dictionaries_from_batch(rb);
+                m_dictionary_blocks.reserve(dictionaries.size());
                 for (const auto& dict_info : dictionaries)
                 {
                     const int64_t dict_offset = static_cast<int64_t>(m_stream.size());
@@ -234,13 +240,13 @@ namespace sparrow_ipc
                     );
                     m_dict_tracker.mark_emitted(dict_info.id);
                 }
-                
+
                 // Offset is from the start of the file to the record batch message
                 const int64_t offset = static_cast<int64_t>(m_stream.size());
-                
+
                 // Serialize and get block info
                 const auto info = serialize_record_batch(rb, m_stream, m_compression, compressed_buffers_cache);
-                
+
                 m_record_batch_blocks.emplace_back(offset, info.metadata_length, info.body_length);
             }
         }
@@ -307,7 +313,7 @@ namespace sparrow_ipc
          * stream_file_serializer ser(stream);
          * ser << batch1 << batch2 << end_file;
          */
-        stream_file_serializer& operator<<(stream_file_serializer& (*manip)(stream_file_serializer&))
+        stream_file_serializer& operator<<(stream_file_serializer& (*manip)(stream_file_serializer&) )
         {
             return manip(*this);
         }
@@ -321,7 +327,7 @@ namespace sparrow_ipc
          * 3. Writing the footer size (int32)
          * 4. Writing the trailing magic bytes (ARROW1)
          *
-         * It can be called multiple times safely as it tracks whether the file has 
+         * It can be called multiple times safely as it tracks whether the file has
          * already been ended to prevent duplicate operations.
          *
          * @note This method is idempotent - calling it multiple times has no additional effect.
