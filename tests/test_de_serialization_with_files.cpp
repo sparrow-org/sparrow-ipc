@@ -59,6 +59,7 @@ const std::vector<std::filesystem::path> files_paths_to_test = {
     tests_resources_files_path / "generated_list_view",
     tests_resources_files_path / "generated_dictionary",
     tests_resources_files_path / "generated_dictionary_unsigned",
+    tests_resources_files_path / "generated_nested_dictionary.json"
 };
 
 const std::vector<std::filesystem::path> files_paths_to_test_with_lz4_compression = {
@@ -463,6 +464,11 @@ TEST_SUITE("Integration tests")
                     std::span<const uint8_t>(stream_data)
                 );
 
+                SUBCASE("Compare stream with JSON deserialization")
+                {
+                    compare_record_batches(record_batches_from_json, record_batches_from_stream);
+                }
+
                 std::vector<uint8_t> serialized_data;
                 sparrow_ipc::memory_output_stream stream(serialized_data);
                 sparrow_ipc::serializer serializer(stream);
@@ -471,10 +477,6 @@ TEST_SUITE("Integration tests")
                     std::span<const uint8_t>(serialized_data)
                 );
 
-                SUBCASE("Compare stream with JSON deserialization")
-                {
-                    compare_record_batches(record_batches_from_json, record_batches_from_stream);
-                }
                 SUBCASE("Compare record_batch de_serialization with stream deserialization")
                 {
                     compare_record_batches(record_batches_from_stream, deserialized_serialized_data);

@@ -23,6 +23,8 @@
 
 namespace sparrow_ipc
 {
+    class dictionary_cache;
+
     /**
      * @brief A class for deserializing Arrow arrays from Flatbuffers messages.
      *
@@ -67,6 +69,8 @@ namespace sparrow_ipc
          * @param buffer_index The current index into the buffer list of the RecordBatch.
          * @param node_index This index tracks the FieldNode being processed in the RecordBatch's depth-first traversal. It is advanced for each FieldNode consumed.
          * @param variadic_counts_idx The current index into the list of variadic buffers (used with view data types).
+         * @param decode_dictionary_indices Whether dictionary-annotated fields should be read from their physical
+         *        index buffers (true) or interpreted as logical dictionary values (false).
          * @param field The Flatbuffer Field object describing the array to deserialize.
          * @return A `sparrow::array` containing the deserialized data.
          * @throws std::runtime_error if the field type is not supported.
@@ -80,9 +84,13 @@ namespace sparrow_ipc
                                    size_t& buffer_index,
                                    size_t& node_index,
                                    size_t& variadic_counts_idx,
-                                   const org::apache::arrow::flatbuf::Field& field);
+                                   bool decode_dictionary_indices,
+                                   const org::apache::arrow::flatbuf::Field& field,
+                                   const dictionary_cache* dictionaries = nullptr);
     private:
         inline static std::unordered_map<org::apache::arrow::flatbuf::Type, deserializer_func> m_deserializer_map;
+        inline static const dictionary_cache* m_active_dictionary_cache = nullptr;
+        inline static size_t m_deserialize_depth = 0;
 
         /**
          * @bried Populate the map with function pointers to the static
@@ -237,6 +245,7 @@ namespace sparrow_ipc
                 buffer_index,
                 node_index,
                 variadic_counts_idx,
+                true,
                 *child_field
             );
 
@@ -409,6 +418,7 @@ namespace sparrow_ipc
                 buffer_index,
                 node_index,
                 variadic_counts_idx,
+                true,
                 *child_field
             );
             const std::string_view format = sparrow::data_type_to_format(sparrow::detail::get_data_type_from_array<T>::get());

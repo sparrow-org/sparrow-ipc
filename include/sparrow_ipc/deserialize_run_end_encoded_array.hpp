@@ -113,6 +113,7 @@ namespace sparrow_ipc
             buffer_index,
             node_index,
             variadic_counts_idx,
+            true,
             *run_ends_field
         );
 
@@ -139,6 +140,7 @@ namespace sparrow_ipc
             buffer_index,
             node_index,
             variadic_counts_idx,
+            true,
             *values_field
         );
 

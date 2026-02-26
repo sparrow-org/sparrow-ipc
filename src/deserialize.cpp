@@ -1,12 +1,9 @@
 #include "sparrow_ipc/deserialize.hpp"
 
-#include <memory>
 #include <unordered_map>
 
 #include "array_deserializer.hpp"
-#include <sparrow/arrow_interface/arrow_array.hpp>
-#include <sparrow/arrow_interface/arrow_schema.hpp>
-#include "sparrow_ipc/deserialize_primitive_array.hpp"
+#include <sparrow/c_interface.hpp>
 #include "sparrow_ipc/dictionary_cache.hpp"
 #include "sparrow_ipc/encapsulated_message.hpp"
 #include "sparrow_ipc/magic_values.hpp"
@@ -18,10 +15,6 @@ namespace sparrow_ipc
     {
         // End-of-stream marker size in bytes
         constexpr size_t END_OF_STREAM_MARKER_SIZE = 8;
-        constexpr int DICTIONARY_INDEX_BIT_WIDTH_8 = 8;
-        constexpr int DICTIONARY_INDEX_BIT_WIDTH_16 = 16;
-        constexpr int DICTIONARY_INDEX_BIT_WIDTH_32 = 32;
-        constexpr int DICTIONARY_INDEX_BIT_WIDTH_64 = 64;
 
         void collect_dictionary_fields(
             const org::apache::arrow::flatbuf::Field& field,
@@ -46,52 +39,6 @@ namespace sparrow_ipc
                     collect_dictionary_fields(*child, dictionary_fields);
                 }
             }
-        }
-
-        sparrow::array apply_dictionary_encoding(
-            sparrow::array index_array,
-            const org::apache::arrow::flatbuf::Field& field,
-            const dictionary_cache& dictionaries
-        )
-        {
-            const auto* dictionary_encoding = field.dictionary();
-            if (dictionary_encoding == nullptr)
-            {
-                return index_array;
-            }
-
-            const auto dictionary_batch = dictionaries.get_dictionary(dictionary_encoding->id());
-            if (!dictionary_batch.has_value())
-            {
-                throw std::runtime_error(
-                    "Dictionary with id " + std::to_string(dictionary_encoding->id())
-                    + " not found when decoding dictionary-encoded field"
-                );
-            }
-
-            const auto& dictionary_columns = dictionary_batch->get().columns();
-            if (dictionary_columns.size() != 1)
-            {
-                throw std::runtime_error("Dictionary batch must have exactly one column");
-            }
-
-            auto [index_arrow_array, index_arrow_schema] = sparrow::extract_arrow_structures(std::move(index_array));
-
-            const auto& dictionary_proxy = sparrow::detail::array_access::get_arrow_proxy(
-                dictionary_columns.front()
-            );
-            auto dictionary_arrow_array = sparrow::copy_array(
-                dictionary_proxy.array(),
-                dictionary_proxy.schema()
-            );
-            auto dictionary_arrow_schema = sparrow::copy_schema(dictionary_proxy.schema());
-
-            auto dictionary_array_ptr = std::make_unique<ArrowArray>(dictionary_arrow_array);
-            auto dictionary_schema_ptr = std::make_unique<ArrowSchema>(dictionary_arrow_schema);
-            index_arrow_array.dictionary = dictionary_array_ptr.release();
-            index_arrow_schema.dictionary = dictionary_schema_ptr.release();
-
-            return sparrow::array(ArrowArray(index_arrow_array), ArrowSchema(index_arrow_schema));
         }
 
         sparrow::record_batch deserialize_dictionary_batch(
@@ -140,75 +87,19 @@ namespace sparrow_ipc
                 buffer_index,
                 node_index,
                 variadic_counts_idx,
+                false,
                 *field
             );
 
             std::vector<std::string> names;
+            names.reserve(1);
             names.emplace_back(field_name);
             std::vector<sparrow::array> arrays;
+            arrays.reserve(1);
             arrays.emplace_back(std::move(values));
             return sparrow::record_batch(std::move(names), std::move(arrays));
         }
 
-        sparrow::array deserialize_dictionary_indices(
-            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-            const std::span<const uint8_t>& body,
-            int64_t length,
-            const std::string& name,
-            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-            bool nullable,
-            size_t& buffer_index,
-            size_t& node_index,
-            const org::apache::arrow::flatbuf::Field& field
-        )
-        {
-            const auto* dictionary = field.dictionary();
-            if (dictionary == nullptr || dictionary->indexType() == nullptr)
-            {
-                throw std::runtime_error("Dictionary-encoded field is missing indexType");
-            }
-
-            ++node_index; // Consume one FieldNode for dictionary indices
-
-            const auto* index_type = dictionary->indexType();
-            const auto bit_width = index_type->bitWidth();
-            const bool is_signed = index_type->is_signed();
-
-            const auto deserialize_for = [&]<class T>() -> sparrow::array
-            {
-                return sparrow::array(
-                    deserialize_primitive_array<T>(
-                        record_batch,
-                        body,
-                        length,
-                        name,
-                        metadata,
-                        nullable,
-                        buffer_index
-                    )
-                );
-            };
-
-            switch (bit_width)
-            {
-                case DICTIONARY_INDEX_BIT_WIDTH_8:
-                    return is_signed ? deserialize_for.template operator()<int8_t>()
-                                     : deserialize_for.template operator()<uint8_t>();
-                case DICTIONARY_INDEX_BIT_WIDTH_16:
-                    return is_signed ? deserialize_for.template operator()<int16_t>()
-                                     : deserialize_for.template operator()<uint16_t>();
-                case DICTIONARY_INDEX_BIT_WIDTH_32:
-                    return is_signed ? deserialize_for.template operator()<int32_t>()
-                                     : deserialize_for.template operator()<uint32_t>();
-                case DICTIONARY_INDEX_BIT_WIDTH_64:
-                    return is_signed ? deserialize_for.template operator()<int64_t>()
-                                     : deserialize_for.template operator()<uint64_t>();
-                default:
-                    throw std::runtime_error(
-                        "Unsupported dictionary index bit width: " + std::to_string(bit_width)
-                    );
-            }
-        }
     }
 
     /**
@@ -261,32 +152,22 @@ namespace sparrow_ipc
             const std::string name = field->name() == nullptr ? "" : field->name()->str();
             const bool nullable = field->nullable();
 
-            sparrow::array decoded = field->dictionary() != nullptr
-                                        ? deserialize_dictionary_indices(
-                                              record_batch,
-                                              encapsulated_message.body(),
-                                              record_batch.length(),
-                                              name,
-                                              metadata,
-                                              nullable,
-                                              buffer_index,
-                                              node_index,
-                                              *field
-                                          )
-                                        : array_deserializer::deserialize(
-                                              record_batch,
-                                              encapsulated_message.body(),
-                                              record_batch.length(),
-                                              name,
-                                              metadata,
-                                              nullable,
-                                              buffer_index,
-                                              node_index,
-                                              variadic_counts_idx,
-                                              *field
-                                          );
-
-            arrays.emplace_back(apply_dictionary_encoding(std::move(decoded), *field, dictionaries));
+            arrays.emplace_back(
+                array_deserializer::deserialize(
+                    record_batch,
+                    encapsulated_message.body(),
+                    record_batch.length(),
+                    name,
+                    metadata,
+                    nullable,
+                    buffer_index,
+                    node_index,
+                    variadic_counts_idx,
+                    true,
+                    *field,
+                    &dictionaries
+                )
+            );
         }
         return arrays;
     }
@@ -296,8 +177,6 @@ namespace sparrow_ipc
         const org::apache::arrow::flatbuf::Schema* schema = nullptr;
         std::vector<sparrow::record_batch> record_batches;
         std::vector<std::string> field_names;
-        std::vector<bool> fields_nullable;
-        std::vector<sparrow::data_type> field_types;
         std::vector<std::optional<std::vector<sparrow::metadata_pair>>> fields_metadata;
         std::unordered_map<int64_t, const org::apache::arrow::flatbuf::Field*> dictionary_fields;
         dictionary_cache dictionaries;
@@ -328,7 +207,6 @@ namespace sparrow_ipc
                                             ? 0
                                             : static_cast<size_t>(schema->fields()->size());
                     field_names.reserve(size);
-                    fields_nullable.reserve(size);
                     fields_metadata.reserve(size);
                     if (schema->fields() == nullptr)
                     {
@@ -344,7 +222,6 @@ namespace sparrow_ipc
                         {
                             field_names.emplace_back("_unnamed_");
                         }
-                        fields_nullable.push_back(field->nullable());
                         const ::flatbuffers::Vector<::flatbuffers::Offset<org::apache::arrow::flatbuf::KeyValue>>*
                             fb_custom_metadata = field->custom_metadata();
                         std::optional<std::vector<sparrow::metadata_pair>>
