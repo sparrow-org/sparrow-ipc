@@ -77,26 +77,35 @@ namespace sparrow_ipc
                 metadata = to_sparrow_metadata(*field->custom_metadata());
             }
 
-            size_t buffer_index = 0;
-            size_t node_index = 0;
-            size_t variadic_counts_idx = 0;
-
             const std::string field_name = (field->name() != nullptr && field->name()->size() > 0)
                                                ? field->name()->str()
                                                : std::string("__dictionary__");
 
-            auto values = array_deserializer::deserialize(
+            size_t buffer_index = 0;
+            size_t node_index = 0;
+            size_t variadic_counts_idx = 0;
+            
+            deserialization_context context(
                 *dict_record_batch,
                 encapsulated_message.body(),
-                dict_record_batch->length(),
-                field_name,
-                metadata,
-                field->nullable(),
                 buffer_index,
                 node_index,
-                variadic_counts_idx,
+                variadic_counts_idx
+            );
+
+            field_descriptor field_desc(
+                dict_record_batch->length(),
+                std::move(field_name),
+                std::move(metadata),
+                field->nullable(),
                 false,
-                *field
+                *field,
+                nullptr // dictionaries
+            );
+
+            auto values = array_deserializer::deserialize(
+                context,
+                field_desc
             );
 
             std::vector<std::string> names;
@@ -150,32 +159,34 @@ namespace sparrow_ipc
         size_t buffer_index = 0;
         size_t node_index = 0;
         size_t variadic_counts_idx = 0;
+
+        deserialization_context context(
+            record_batch,
+            encapsulated_message.body(),
+            buffer_index,
+            node_index,
+            variadic_counts_idx
+        );
+
         for (const auto field : *(schema.fields()))
         {
             if (!field)
             {
                 throw std::runtime_error("Invalid null field.");
             }
-            const std::optional<std::vector<sparrow::metadata_pair>>& metadata = field_metadata[field_idx++];
             const std::string name = field->name() == nullptr ? "" : field->name()->str();
-            const bool nullable = field->nullable();
 
-            arrays.emplace_back(
-                array_deserializer::deserialize(
-                    record_batch,
-                    encapsulated_message.body(),
-                    record_batch.length(),
-                    name,
-                    metadata,
-                    nullable,
-                    buffer_index,
-                    node_index,
-                    variadic_counts_idx,
-                    true,
-                    *field,
-                    &dictionaries
-                )
+            field_descriptor field_desc(
+                record_batch.length(),
+                std::move(name),
+                field_metadata[field_idx++],
+                field->nullable(),
+                true,
+                *field,
+                &dictionaries
             );
+
+            arrays.emplace_back(array_deserializer::deserialize(context, field_desc));
         }
         return arrays;
     }

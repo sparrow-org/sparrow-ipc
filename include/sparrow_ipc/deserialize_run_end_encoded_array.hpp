@@ -10,17 +10,15 @@
 #include <sparrow/arrow_interface/arrow_array_schema_proxy.hpp>
 #include <sparrow/run_end_encoded_array.hpp>
 
-#include "Message_generated.h"
 #include "sparrow_ipc/arrow_interface/arrow_array.hpp"
 #include "sparrow_ipc/arrow_interface/arrow_schema.hpp"
+#include "sparrow_ipc/deserialization_context.hpp"
 #include "sparrow_ipc/deserialize_utils.hpp"
-#include "sparrow_ipc/metadata.hpp"
 
 class array_deserializer;
 
 namespace sparrow_ipc
 {
-    class dictionary_cache;
     /**
      * @brief Deserialize a run-end encoded array from IPC format.
      *
@@ -32,66 +30,48 @@ namespace sparrow_ipc
      * The run-end encoded array has no buffers at the parent level - only two child arrays.
      * The children should have the same encoded length (number of runs).
      *
-     * @param record_batch The FlatBuffer RecordBatch containing metadata
-     * @param body The raw buffer data
-     * @param length The number of elements in the decoded array (parent length)
-     * @param name The array column name
-     * @param metadata Optional metadata pairs  
-     * @param nullable Whether the parent array is nullable
-     * @param buffer_index The current buffer index (not incremented for parent, incremented by children)
-     * @param node_index The current node index (incremented for parent, passed to children)
-     * @param variadic_counts_idx The current index into variadic buffer counts
-     * @param field The FlatBuffer Field object describing the array
-     * @param array_deserializer The deserializer to use for child arrays
+     * @param context The deserialization context.
+     * @param field_desc The field descriptor.
      *
      * @return The deserialized run-end encoded array
      */
     [[nodiscard]] sparrow::run_end_encoded_array deserialize_run_end_encoded_array(
-        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-        std::span<const uint8_t> body,
-        const int64_t length,
-        std::string_view name,
-        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-        bool nullable,
-        size_t& buffer_index,
-        size_t& node_index,
-        size_t& variadic_counts_idx,
-        const org::apache::arrow::flatbuf::Field& field,
-        const dictionary_cache* dictionaries = nullptr
+        deserialization_context& context,
+        const field_descriptor& field_desc
     )
     {
-        ++node_index;  // Consume one FieldNode for this run-end encoded array (parent)
+        ++context.node_index;  // Consume one FieldNode for this run-end encoded array (parent)
         constexpr size_t n_children = 2;
 
         std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
-        if (nullable)
+        if (field_desc.nullable)
         {
             flags = std::unordered_set<sparrow::ArrowFlag>{sparrow::ArrowFlag::NULLABLE};
         }
 
-        if (!field.children() || field.children()->size() != n_children)
+        if (!field_desc.field.children() || field_desc.field.children()->size() != n_children)
         {
             throw std::runtime_error(
                 "Run-end encoded array field must have exactly 2 children (run ends and values)"
             );
         }
 
-        const auto* run_ends_field = field.children()->Get(0);
+        const auto* run_ends_field = field_desc.field.children()->Get(0);
         if (!run_ends_field)
         {
             throw std::runtime_error("Run-end encoded array field has null run ends child.");
         }
         
-        const auto* nodes = record_batch.nodes();
-        if (!nodes || node_index >= nodes->size())
+        const auto* nodes = context.record_batch.nodes();
+        if (!nodes || context.node_index >= nodes->size())
         {
             throw std::runtime_error(
                 "Run-end encoded array: insufficient FieldNodes. Expected run_ends child node at index "
-                + std::to_string(node_index)
+                + std::to_string(context.node_index)
             );
         }
         
-        const auto* run_ends_node = nodes->Get(node_index);
+        const auto* run_ends_node = nodes->Get(context.node_index);
         if (!run_ends_node)
         {
             throw std::runtime_error("Run-end encoded array: null run_ends FieldNode.");
@@ -105,23 +85,31 @@ namespace sparrow_ipc
             run_ends_metadata = to_sparrow_metadata(*run_ends_field->custom_metadata());
         }
         
-        sparrow::array run_ends_array = array_deserializer::deserialize(
-            record_batch,
-            body,
+        deserialization_context run_ends_context(
+            context.record_batch,
+            context.body,
+            context.buffer_index,
+            context.node_index,
+            context.variadic_counts_idx
+        );
+
+        field_descriptor run_ends_desc(
             encoded_length,
             run_ends_field->name()->str(),
-            run_ends_metadata,
+            std::move(run_ends_metadata),
             run_ends_field->nullable(),
-            buffer_index,
-            node_index,
-            variadic_counts_idx,
             true,
             *run_ends_field,
-            dictionaries
+            field_desc.dictionaries
+        );
+
+        sparrow::array run_ends_array = array_deserializer::deserialize(
+            run_ends_context,
+            run_ends_desc
         );
 
         // Deserialize the second child: encoded values
-        const auto* values_field = field.children()->Get(1);
+        const auto* values_field = field_desc.field.children()->Get(1);
         if (!values_field)
         {
             throw std::runtime_error("Run-end encoded array field has null values child.");
@@ -133,19 +121,27 @@ namespace sparrow_ipc
             values_metadata = to_sparrow_metadata(*values_field->custom_metadata());
         }
 
-        sparrow::array values_array = array_deserializer::deserialize(
-            record_batch,
-            body,
+        deserialization_context values_context(
+            context.record_batch,
+            context.body,
+            context.buffer_index,
+            context.node_index,
+            context.variadic_counts_idx
+        );
+
+        field_descriptor values_desc(
             encoded_length,  // Same encoded length as run ends
             values_field->name()->str(),
-            values_metadata,
+            std::move(values_metadata),
             values_field->nullable(),
-            buffer_index,
-            node_index,
-            variadic_counts_idx,
             true,
             *values_field,
-            dictionaries
+            field_desc.dictionaries
+        );
+
+        sparrow::array values_array = array_deserializer::deserialize(
+            values_context,
+            values_desc
         );
 
         auto [run_ends_arrow_array, run_ends_arrow_schema] = sparrow::extract_arrow_structures(std::move(run_ends_array));
@@ -158,8 +154,8 @@ namespace sparrow_ipc
         const std::string_view format = "+r"; // TODO: Use sparrow::data_type_to_format(sparrow::data_type::RUN_ENCODED); when it will be available on sparrow
         ArrowSchema schema = make_non_owning_arrow_schema(
             format,
-            name,
-            metadata,
+            field_desc.name,
+            field_desc.metadata,
             flags,
             n_children,
             schema_children,
@@ -172,7 +168,7 @@ namespace sparrow_ipc
 
 
         ArrowArray array = make_arrow_array<arrow_array_private_data>(
-            length,
+            field_desc.length,
             0,
             0,
             n_children,

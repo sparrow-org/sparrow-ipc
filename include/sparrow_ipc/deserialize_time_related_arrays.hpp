@@ -12,43 +12,28 @@
 #include <sparrow/timestamp_array.hpp>
 #include <sparrow/timestamp_without_timezone_array.hpp>
 
-#include "Message_generated.h"
+#include "sparrow_ipc/deserialization_context.hpp"
 #include "sparrow_ipc/deserialize_array_impl.hpp"
 
 namespace sparrow_ipc
 {
     template <typename T>
     [[nodiscard]] sparrow::date_array<T> deserialize_date_array(
-        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-        std::span<const uint8_t> body,
-        const int64_t length,
-        std::string_view name,
-        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-        bool nullable,
-        size_t& buffer_index
+        deserialization_context& context,
+        const field_descriptor& field_desc
     )
     {
         return detail::deserialize_simple_array<sparrow::date_array, T>(
-            record_batch,
-            body,
-            length,
-            name,
-            metadata,
-            nullable,
-            buffer_index,
+            context,
+            field_desc,
             std::nullopt
         );
     }
 
     template <typename T>
     [[nodiscard]] sparrow::timestamp_array<T> deserialize_timestamp_array(
-        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-        std::span<const uint8_t> body,
-        const int64_t length,
-        std::string_view name,
-        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-        bool nullable,
-        size_t& buffer_index,
+        deserialization_context& context,
+        const field_descriptor& field_desc,
         const std::string& timezone
     )
     {
@@ -57,59 +42,34 @@ namespace sparrow_ipc
         )) + timezone;
 
         return detail::deserialize_simple_array<sparrow::timestamp_array, T>(
-            record_batch,
-            body,
-            length,
-            name,
-            metadata,
-            nullable,
-            buffer_index,
+            context,
+            field_desc,
             std::move(format)
         );
     }
 
     template <typename T>
     [[nodiscard]] sparrow::timestamp_without_timezone_array<T> deserialize_timestamp_without_timezone_array(
-        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-        std::span<const uint8_t> body,
-        const int64_t length,
-        std::string_view name,
-        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-        bool nullable,
-        size_t& buffer_index
+        deserialization_context& context,
+        const field_descriptor& field_desc
     )
     {
         return detail::deserialize_simple_array<sparrow::timestamp_without_timezone_array, T>(
-            record_batch,
-            body,
-            length,
-            name,
-            metadata,
-            nullable,
-            buffer_index,
+            context,
+            field_desc,
             std::nullopt
         );
     }
 
     template <typename T>
     [[nodiscard]] sparrow::time_array<T> deserialize_time_array(
-        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-        std::span<const uint8_t> body,
-        const int64_t length,
-        std::string_view name,
-        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-        bool nullable,
-        size_t& buffer_index
+        deserialization_context& context,
+        const field_descriptor& field_desc
     )
     {
         return detail::deserialize_simple_array<sparrow::time_array, T>(
-            record_batch,
-            body,
-            length,
-            name,
-            metadata,
-            nullable,
-            buffer_index,
+            context,
+            field_desc,
             std::nullopt
         );
     }

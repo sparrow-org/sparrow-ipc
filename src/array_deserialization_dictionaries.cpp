@@ -96,24 +96,17 @@ namespace sparrow_ipc
     }
 
     sparrow::array deserialize_dictionary_indices(
-        const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-        const std::span<const uint8_t>& body,
-        int64_t length,
-        const std::string& name,
-        const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-        bool nullable,
-        size_t& buffer_index,
-        size_t& node_index,
-        const org::apache::arrow::flatbuf::Field& field
+        deserialization_context& context,
+        const field_descriptor& field_desc
     )
     {
-        const auto* dictionary = field.dictionary();
+        const auto* dictionary = field_desc.field.dictionary();
         if (dictionary == nullptr || dictionary->indexType() == nullptr)
         {
             throw std::runtime_error("Dictionary-encoded field is missing indexType");
         }
 
-        ++node_index;
+        ++context.node_index;
 
         const auto* index_type = dictionary->indexType();
         const auto bit_width = index_type->bitWidth();
@@ -122,7 +115,7 @@ namespace sparrow_ipc
         const auto deserialize_for = [&]<class T>() -> sparrow::array
         {
             return sparrow::array(
-                deserialize_primitive_array<T>(record_batch, body, length, name, metadata, nullable, buffer_index)
+                deserialize_primitive_array<T>(context, field_desc)
             );
         };
 
