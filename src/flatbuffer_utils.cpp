@@ -786,6 +786,12 @@ namespace sparrow_ipc
 
     namespace
     {
+        struct record_batch_payload
+        {
+            flatbuffers::Offset<org::apache::arrow::flatbuf::RecordBatch> record_batch_offset = 0;
+            int64_t body_size = 0;
+        };
+
         std::vector<int64_t> get_variadic_buffer_counts(const sparrow::record_batch& record_batch)
         {
             std::vector<int64_t> counts;
@@ -818,6 +824,52 @@ namespace sparrow_ipc
             }
             return counts;
         }
+
+        record_batch_payload create_record_batch_payload(
+            flatbuffers::FlatBufferBuilder& builder,
+            const sparrow::record_batch& record_batch,
+            std::optional<CompressionType> compression,
+            std::optional<std::reference_wrapper<CompressionCache>> cache
+        )
+        {
+            flatbuffers::Offset<org::apache::arrow::flatbuf::BodyCompression> compression_offset = 0;
+            std::optional<std::vector<org::apache::arrow::flatbuf::Buffer>> compressed_buffers;
+            if (compression)
+            {
+                if (!cache)
+                {
+                    throw std::invalid_argument("Compression type set but no cache is given.");
+                }
+                compressed_buffers = get_compressed_buffers(record_batch, compression.value(), cache.value().get());
+                compression_offset = org::apache::arrow::flatbuf::CreateBodyCompression(
+                    builder,
+                    details::to_fb_compression_type(compression.value()),
+                    org::apache::arrow::flatbuf::BodyCompressionMethod::BUFFER
+                );
+            }
+
+            const auto& buffers = compressed_buffers ? *compressed_buffers : get_buffers(record_batch);
+            const std::vector<org::apache::arrow::flatbuf::FieldNode> nodes = create_fieldnodes(record_batch);
+            const auto variadic_counts = get_variadic_buffer_counts(record_batch);
+
+            auto nodes_offset = builder.CreateVectorOfStructs(nodes);
+            auto buffers_offset = builder.CreateVectorOfStructs(buffers);
+            auto variadic_counts_offset = builder.CreateVector(variadic_counts);
+
+            const auto record_batch_offset = org::apache::arrow::flatbuf::CreateRecordBatch(
+                builder,
+                static_cast<int64_t>(record_batch.nb_rows()),
+                nodes_offset,
+                buffers_offset,
+                compression_offset,
+                variadic_counts_offset
+            );
+
+            return {
+                record_batch_offset,
+                calculate_body_size(record_batch, compression, cache)
+            };
+        }
     }
 
     flatbuffers::FlatBufferBuilder get_record_batch_message_builder(
@@ -827,43 +879,13 @@ namespace sparrow_ipc
     )
     {
         flatbuffers::FlatBufferBuilder record_batch_builder;
-        flatbuffers::Offset<org::apache::arrow::flatbuf::BodyCompression> compression_offset = 0;
-        std::optional<std::vector<org::apache::arrow::flatbuf::Buffer>> compressed_buffers;
-        if (compression)
-        {
-            if (!cache)
-            {
-                throw std::invalid_argument("Compression type set but no cache is given.");
-            }
-            compressed_buffers = get_compressed_buffers(record_batch, compression.value(), cache.value().get());
-            compression_offset = org::apache::arrow::flatbuf::CreateBodyCompression(
-                record_batch_builder,
-                details::to_fb_compression_type(compression.value()),
-                org::apache::arrow::flatbuf::BodyCompressionMethod::BUFFER
-            );
-        }
-        const auto& buffers = compressed_buffers ? *compressed_buffers : get_buffers(record_batch);
-        const std::vector<org::apache::arrow::flatbuf::FieldNode> nodes = create_fieldnodes(record_batch);
-        const auto variadic_counts = get_variadic_buffer_counts(record_batch);
-        auto nodes_offset = record_batch_builder.CreateVectorOfStructs(nodes);
-        auto buffers_offset = record_batch_builder.CreateVectorOfStructs(buffers);
-        auto variadic_counts_offset = record_batch_builder.CreateVector(variadic_counts);
-        const auto record_batch_offset = org::apache::arrow::flatbuf::CreateRecordBatch(
-            record_batch_builder,
-            static_cast<int64_t>(record_batch.nb_rows()),
-            nodes_offset,
-            buffers_offset,
-            compression_offset,
-            variadic_counts_offset
-        );
-
-        const int64_t body_size = calculate_body_size(record_batch, compression, cache);
+        const auto payload = create_record_batch_payload(record_batch_builder, record_batch, compression, cache);
         const auto record_batch_message_offset = org::apache::arrow::flatbuf::CreateMessage(
             record_batch_builder,
             org::apache::arrow::flatbuf::MetadataVersion::V5,
             org::apache::arrow::flatbuf::MessageHeader::RecordBatch,
-            record_batch_offset.Union(),
-            body_size,  // body length
+            payload.record_batch_offset.Union(),
+            payload.body_size,  // body length
             0           // custom metadata
         );
         record_batch_builder.Finish(record_batch_message_offset);
@@ -884,51 +906,15 @@ namespace sparrow_ipc
         }
 
         flatbuffers::FlatBufferBuilder dict_batch_builder;
-
-        // Create the RecordBatch FlatBuffer for the dictionary data
-        flatbuffers::Offset<org::apache::arrow::flatbuf::BodyCompression> compression_offset = 0;
-        std::optional<std::vector<org::apache::arrow::flatbuf::Buffer>> compressed_buffers;
-        if (compression)
-        {
-            if (!cache)
-            {
-                throw std::invalid_argument("Compression type set but no cache is given.");
-            }
-            compressed_buffers = get_compressed_buffers(record_batch, compression.value(), cache.value().get());
-            compression_offset = org::apache::arrow::flatbuf::CreateBodyCompression(
-                dict_batch_builder,
-                details::to_fb_compression_type(compression.value()),
-                org::apache::arrow::flatbuf::BodyCompressionMethod::BUFFER
-            );
-        }
-
-        const auto& buffers = compressed_buffers ? *compressed_buffers : get_buffers(record_batch);
-        const std::vector<org::apache::arrow::flatbuf::FieldNode> nodes = create_fieldnodes(record_batch);
-        const auto variadic_counts = get_variadic_buffer_counts(record_batch);
-
-        auto nodes_offset = dict_batch_builder.CreateVectorOfStructs(nodes);
-        auto buffers_offset = dict_batch_builder.CreateVectorOfStructs(buffers);
-        auto variadic_counts_offset = dict_batch_builder.CreateVector(variadic_counts);
-
-        const auto record_batch_offset = org::apache::arrow::flatbuf::CreateRecordBatch(
-            dict_batch_builder,
-            static_cast<int64_t>(record_batch.nb_rows()),
-            nodes_offset,
-            buffers_offset,
-            compression_offset,
-            variadic_counts_offset
-        );
+        const auto payload = create_record_batch_payload(dict_batch_builder, record_batch, compression, cache);
 
         // Create the DictionaryBatch wrapping the RecordBatch
         const auto dictionary_batch_offset = org::apache::arrow::flatbuf::CreateDictionaryBatch(
             dict_batch_builder,
             dictionary_id,
-            record_batch_offset,
+            payload.record_batch_offset,
             is_delta
         );
-
-        // Calculate body size
-        const int64_t body_size = calculate_body_size(record_batch, compression, cache);
 
         // Create the Message with DictionaryBatch as the header
         const auto dictionary_batch_message_offset = org::apache::arrow::flatbuf::CreateMessage(
@@ -936,7 +922,7 @@ namespace sparrow_ipc
             org::apache::arrow::flatbuf::MetadataVersion::V5,
             org::apache::arrow::flatbuf::MessageHeader::DictionaryBatch,
             dictionary_batch_offset.Union(),
-            body_size,
+            payload.body_size,
             0  // custom metadata
         );
 
