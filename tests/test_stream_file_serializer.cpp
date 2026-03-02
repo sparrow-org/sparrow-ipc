@@ -5,6 +5,7 @@
 #include <File_generated.h>
 
 #include <sparrow/array.hpp>
+#include <sparrow/dictionary_encoded_array.hpp>
 #include <sparrow/record_batch.hpp>
 
 #include "sparrow_ipc/memory_output_stream.hpp"
@@ -273,6 +274,31 @@ TEST_SUITE("Stream file serializer tests")
         serializer.end();
         
         CHECK_THROWS_AS(serializer.write(batch), std::runtime_error);
+    }
+
+    TEST_CASE("Error: file format rejects dictionary replacement for same id")
+    {
+        using dict_array_t = sparrow::dictionary_encoded_array<int8_t>;
+
+        sparrow::record_batch batch0(
+            {{"col", sparrow::array(dict_array_t(
+                dict_array_t::keys_buffer_type{0, 1, 2, 1},
+                sparrow::array(sparrow::string_array(std::vector<std::string>{"A", "B", "C"}))
+            ))}}
+        );
+
+        sparrow::record_batch batch1(
+            {{"col", sparrow::array(dict_array_t(
+                dict_array_t::keys_buffer_type{3, 2, 4, 0},
+                sparrow::array(sparrow::string_array(std::vector<std::string>{"A", "B", "C", "D", "E"}))
+            ))}}
+        );
+
+        std::vector<uint8_t> file_data;
+        sparrow_ipc::memory_output_stream mem_stream(file_data);
+        sparrow_ipc::stream_file_serializer serializer(mem_stream);
+
+        CHECK_THROWS_AS(serializer.write(std::vector<sparrow::record_batch>{batch0, batch1}), std::runtime_error);
     }
 
     TEST_CASE("Footer contains correct number of record batch blocks")

@@ -6,6 +6,7 @@
 #include <sparrow/record_batch.hpp>
 
 #include "sparrow_ipc/compression.hpp"
+#include "sparrow_ipc/dictionary_iteration.hpp"
 #include "sparrow_ipc/dictionary_tracker.hpp"
 #include "sparrow_ipc/serialize_utils.hpp"
 
@@ -35,8 +36,7 @@ namespace sparrow_ipc
             [&cache, &reservation_tracker, compression](std::size_t acc, const sparrow::record_batch& rb)
             {
                 std::size_t dictionaries_size = 0;
-                const auto dictionaries = reservation_tracker.extract_dictionaries_from_batch(rb);
-                for (const auto& dict_info : dictionaries)
+                for_each_pending_dictionary(rb, reservation_tracker, [&](const dictionary_info& dict_info)
                 {
                     dictionaries_size += calculate_dictionary_batch_message_size(
                         dict_info.id,
@@ -45,8 +45,7 @@ namespace sparrow_ipc
                         compression,
                         cache
                     );
-                    reservation_tracker.mark_emitted(dict_info.id);
-                }
+                });
 
                 return acc + dictionaries_size
                        + calculate_record_batch_message_size(rb, compression, cache);

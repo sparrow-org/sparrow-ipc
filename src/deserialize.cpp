@@ -23,7 +23,15 @@ namespace sparrow_ipc
         {
             if (const auto* dictionary = field.dictionary(); dictionary != nullptr)
             {
-                dictionary_fields[dictionary->id()] = &field;
+                const int64_t dictionary_id = dictionary->id();
+                if (dictionary_fields.contains(dictionary_id))
+                {
+                    throw std::runtime_error(
+                        "Duplicate dictionary id " + std::to_string(dictionary_id)
+                        + " declared in schema"
+                    );
+                }
+                dictionary_fields[dictionary_id] = &field;
             }
 
             const auto* children = field.children();
@@ -203,6 +211,7 @@ namespace sparrow_ipc
                 case org::apache::arrow::flatbuf::MessageHeader::Schema:
                 {
                     schema = message->header_as_Schema();
+                    dictionary_fields.clear();
                     const size_t size = schema->fields() == nullptr
                                             ? 0
                                             : static_cast<size_t>(schema->fields()->size());

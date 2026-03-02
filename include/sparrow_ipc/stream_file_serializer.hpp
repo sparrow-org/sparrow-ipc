@@ -9,6 +9,7 @@
 #include "sparrow_ipc/any_output_stream.hpp"
 #include "sparrow_ipc/compression.hpp"
 #include "sparrow_ipc/config/config.hpp"
+#include "sparrow_ipc/dictionary_iteration.hpp"
 #include "sparrow_ipc/dictionary_tracker.hpp"
 #include "sparrow_ipc/magic_values.hpp"
 #include "sparrow_ipc/serialize.hpp"
@@ -201,11 +202,16 @@ namespace sparrow_ipc
                     throw std::invalid_argument("Record batch schema does not match file serializer schema");
                 }
 
-                // Emit dictionary batches before the record batch
-                auto dictionaries = m_dict_tracker.extract_dictionaries_from_batch(rb);
-                m_dictionary_blocks.reserve(m_dictionary_blocks.size() + dictionaries.size());
-                for (const auto& dict_info : dictionaries)
+                for_each_pending_dictionary(rb, m_dict_tracker, [&](const dictionary_info& dict_info)
                 {
+                    if (m_dict_tracker.is_emitted(dict_info.id) && !dict_info.is_delta)
+                    {
+                        throw std::runtime_error(
+                            "Arrow file format does not support multiple non-delta dictionary batches "
+                            "for the same dictionary id"
+                        );
+                    }
+
                     const int64_t dict_offset = static_cast<int64_t>(m_stream.size());
                     const auto dict_block_info = serialize_dictionary_batch(
                         dict_info.id,
@@ -220,8 +226,7 @@ namespace sparrow_ipc
                         dict_block_info.metadata_length,
                         dict_block_info.body_length
                     );
-                    m_dict_tracker.mark_emitted(dict_info.id);
-                }
+                });
 
                 // Offset is from the start of the file to the record batch message
                 const int64_t offset = static_cast<int64_t>(m_stream.size());
