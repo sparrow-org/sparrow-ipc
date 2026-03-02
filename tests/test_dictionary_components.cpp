@@ -3,6 +3,7 @@
 
 #include <doctest/doctest.h>
 
+#include <sparrow/dictionary_encoded_array.hpp>
 #include <sparrow/utils/metadata.hpp>
 
 #include "sparrow_ipc/any_output_stream.hpp"
@@ -249,6 +250,41 @@ TEST_SUITE("dictionary_components")
         tracker.reset();
         const auto after_reset = tracker.extract_dictionaries_from_batch(batches.front());
         CHECK_FALSE(after_reset.empty());
+    }
+
+    TEST_CASE("dictionary_tracker re-emits dictionary when values change for same id")
+    {
+        sparrow_ipc::dictionary_tracker tracker;
+        using dict_array_t = sp::dictionary_encoded_array<int8_t>;
+
+        const auto base_batch = sp::record_batch(
+            {{"col", sp::array(dict_array_t(
+                dict_array_t::keys_buffer_type{0, 1, 2, 1},
+                sp::array(sp::string_array(std::vector<std::string>{"A", "B", "C"}))
+            ))}}
+        );
+        const auto base_extracted = tracker.extract_dictionaries_from_batch(base_batch);
+        REQUIRE_EQ(base_extracted.size(), size_t{1});
+        CHECK_FALSE(base_extracted[0].is_delta);
+
+        const int64_t dict_id = base_extracted[0].id;
+        tracker.mark_emitted(dict_id);
+
+        const auto extended_batch = sp::record_batch(
+            {{"col", sp::array(dict_array_t(
+                dict_array_t::keys_buffer_type{3, 2, 4, 0},
+                sp::array(sp::string_array(std::vector<std::string>{"A", "B", "C", "D", "E"}))
+            ))}}
+        );
+        const auto changed = tracker.extract_dictionaries_from_batch(extended_batch);
+
+        REQUIRE_EQ(changed.size(), size_t{1});
+        CHECK_EQ(changed[0].id, dict_id);
+        CHECK_FALSE(changed[0].is_delta);
+
+        tracker.mark_emitted(dict_id);
+        const auto unchanged_after_emit = tracker.extract_dictionaries_from_batch(extended_batch);
+        CHECK(unchanged_after_emit.empty());
     }
 
     TEST_CASE("dictionary_tracker returns empty for non-dictionary record batch")

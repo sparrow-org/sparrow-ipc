@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <set>
+#include <unordered_map>
 #include <vector>
 
 #include <sparrow/record_batch.hpp>
@@ -75,5 +77,7 @@ namespace sparrow_ipc
 
     private:
         std::set<int64_t> m_emitted_dict_ids;  ///< IDs of dictionaries already emitted
+        std::unordered_map<int64_t, std::size_t> m_emitted_dict_fingerprints;
+        std::unordered_map<int64_t, std::size_t> m_pending_dict_fingerprints;
     };
 }

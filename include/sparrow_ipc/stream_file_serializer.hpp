@@ -203,7 +203,7 @@ namespace sparrow_ipc
 
                 // Emit dictionary batches before the record batch
                 auto dictionaries = m_dict_tracker.extract_dictionaries_from_batch(rb);
-                m_dictionary_blocks.reserve(dictionaries.size());
+                m_dictionary_blocks.reserve(m_dictionary_blocks.size() + dictionaries.size());
                 for (const auto& dict_info : dictionaries)
                 {
                     const int64_t dict_offset = static_cast<int64_t>(m_stream.size());

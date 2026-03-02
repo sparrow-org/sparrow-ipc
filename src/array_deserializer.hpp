@@ -89,7 +89,7 @@ namespace sparrow_ipc
                                    const dictionary_cache* dictionaries = nullptr);
     private:
         inline static std::unordered_map<org::apache::arrow::flatbuf::Type, deserializer_func> m_deserializer_map;
-        inline static const dictionary_cache* m_active_dictionary_cache = nullptr;
+        inline static thread_local const dictionary_cache* m_active_dictionary_cache = nullptr;
 
         /**
          * @bried Populate the map with function pointers to the static

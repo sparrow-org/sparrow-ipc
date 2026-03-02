@@ -164,4 +164,40 @@ TEST_SUITE("Dictionary support")
         CHECK_NE(rb1.get_column(0)[2], rb0.get_column(0)[1]);   // "E" != "B"
         CHECK_NE(rb1.get_column(0)[2], rb0.get_column(0)[2]);   // "E" != "C"
     }
+
+    TEST_CASE("Serializer re-emits changed dictionary for same id")
+    {
+        namespace sp = sparrow;
+        using dict_array_t = sp::dictionary_encoded_array<int8_t>;
+
+        sp::record_batch batch0(
+            {{"col", sp::array(dict_array_t(
+                dict_array_t::keys_buffer_type{0, 1, 2, 1},
+                sp::array(sp::string_array(std::vector<std::string>{"A", "B", "C"}))
+            ))}}
+        );
+
+        sp::record_batch batch1(
+            {{"col", sp::array(dict_array_t(
+                dict_array_t::keys_buffer_type{3, 2, 4, 0},
+                sp::array(sp::string_array(std::vector<std::string>{"A", "B", "C", "D", "E"}))
+            ))}}
+        );
+
+        std::vector<uint8_t> bytes;
+        sparrow_ipc::memory_output_stream mem_stream(bytes);
+        sparrow_ipc::serializer serializer(mem_stream);
+        serializer << std::vector<sp::record_batch>{batch0, batch1} << sparrow_ipc::end_stream;
+
+        const auto result = sparrow_ipc::deserialize_stream(std::span<const uint8_t>(bytes));
+        REQUIRE_EQ(result.size(), size_t{2});
+
+        const auto& rb0 = result[0];
+        const auto& rb1 = result[1];
+        REQUIRE_EQ(rb0.nb_rows(), size_t{4});
+        REQUIRE_EQ(rb1.nb_rows(), size_t{4});
+        CHECK_EQ(rb1.get_column(0)[1], rb0.get_column(0)[2]);
+        CHECK_EQ(rb1.get_column(0)[3], rb0.get_column(0)[0]);
+        CHECK_NE(rb1.get_column(0)[0], rb0.get_column(0)[2]);
+    }
 }
