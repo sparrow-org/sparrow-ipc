@@ -86,6 +86,38 @@ namespace sparrow_ipc
         return metadata_size + actual_body_size;
     }
 
+    std::size_t calculate_dictionary_batch_message_size(
+        int64_t dictionary_id,
+        const sparrow::record_batch& record_batch,
+        bool is_delta,
+        std::optional<CompressionType> compression,
+        std::optional<std::reference_wrapper<CompressionCache>> cache
+    )
+    {
+        // Build the dictionary batch message to get its exact metadata size
+        flatbuffers::FlatBufferBuilder dictionary_batch_builder = get_dictionary_batch_message_builder(
+            dictionary_id,
+            record_batch,
+            is_delta,
+            compression,
+            cache
+        );
+        const flatbuffers::uoffset_t dictionary_batch_len = dictionary_batch_builder.GetSize();
+
+        const std::size_t actual_body_size = static_cast<std::size_t>(calculate_body_size(record_batch, compression, cache));
+
+        // Calculate total size:
+        // - Continuation bytes (4)
+        // - Message length prefix (4)
+        // - FlatBuffer dictionary batch metadata
+        // - Padding after metadata to 8-byte alignment
+        // - Body data (already aligned)
+        std::size_t metadata_size = continuation.size() + sizeof(uint32_t) + dictionary_batch_len;
+        metadata_size = utils::align_to_8(metadata_size);
+
+        return metadata_size + actual_body_size;
+    }
+
     std::vector<sparrow::data_type> get_column_dtypes(const sparrow::record_batch& rb)
     {
         std::vector<sparrow::data_type> dtypes;

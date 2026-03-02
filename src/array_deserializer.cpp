@@ -73,9 +73,44 @@ namespace sparrow_ipc
         const dictionary_cache* dictionaries
     )
     {
-        if (decode_dictionary_indices && field.dictionary() != nullptr)
+        const auto deserialize_impl = [&]() -> sparrow::array
         {
-            auto indices = deserialize_dictionary_indices(
+            if (decode_dictionary_indices && field.dictionary() != nullptr)
+            {
+                auto indices = deserialize_dictionary_indices(
+                    record_batch,
+                    body,
+                    length,
+                    name,
+                    metadata,
+                    nullable,
+                    buffer_index,
+                    node_index,
+                    field
+                );
+
+                const dictionary_cache* cache = dictionaries != nullptr ? dictionaries
+                                                                        : m_active_dictionary_cache;
+
+                if (cache == nullptr)
+                {
+                    return indices;
+                }
+
+                return apply_dictionary_encoding(std::move(indices), field, *cache);
+            }
+
+            initialize_deserializer_map();
+            auto it = m_deserializer_map.find(field.type_type());
+            if (it == m_deserializer_map.end())
+            {
+                throw std::runtime_error(
+                    "Unsupported field type: " + std::to_string(static_cast<int>(field.type_type()))
+                    + " for field '" + name + "'"
+                );
+            }
+
+            return it->second(
                 record_batch,
                 body,
                 length,
@@ -84,41 +119,29 @@ namespace sparrow_ipc
                 nullable,
                 buffer_index,
                 node_index,
+                variadic_counts_idx,
                 field
             );
+        };
 
-            const dictionary_cache* cache = dictionaries != nullptr ? dictionaries : m_active_dictionary_cache;
-
-            if (cache == nullptr)
-            {
-                return indices;
-            }
-
-            return apply_dictionary_encoding(std::move(indices), field, *cache);
-        }
-
-        initialize_deserializer_map();
-        auto it = m_deserializer_map.find(field.type_type());
-        if (it == m_deserializer_map.end())
+        if (dictionaries == nullptr)
         {
-            throw std::runtime_error(
-                "Unsupported field type: " + std::to_string(static_cast<int>(field.type_type()))
-                + " for field '" + name + "'"
-            );
+            return deserialize_impl();
         }
 
-        return it->second(
-            record_batch,
-            body,
-            length,
-            name,
-            metadata,
-            nullable,
-            buffer_index,
-            node_index,
-            variadic_counts_idx,
-            field
-        );
+        const dictionary_cache* previous_active_dictionary_cache = m_active_dictionary_cache;
+        m_active_dictionary_cache = dictionaries;
+        try
+        {
+            auto result = deserialize_impl();
+            m_active_dictionary_cache = previous_active_dictionary_cache;
+            return result;
+        }
+        catch (...)
+        {
+            m_active_dictionary_cache = previous_active_dictionary_cache;
+            throw;
+        }
     }
 
     sparrow::array array_deserializer::deserialize_int(

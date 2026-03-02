@@ -247,6 +247,69 @@ namespace sparrow_ipc
             }
         }
 
+        TEST_CASE("calculate_dictionary_batch_message_size")
+        {
+            auto test_calculate_dictionary_batch_message_size =
+                [](const sp::record_batch& record_batch,
+                   int64_t dictionary_id,
+                   bool is_delta,
+                   std::optional<CompressionType> compression)
+            {
+                CompressionCache cache_for_estimated;
+                const auto estimated_size = calculate_dictionary_batch_message_size(
+                    dictionary_id,
+                    record_batch,
+                    is_delta,
+                    compression,
+                    cache_for_estimated
+                );
+                CHECK_GT(estimated_size, 0);
+                CHECK_EQ(estimated_size % 8, 0);
+
+                std::vector<uint8_t> serialized;
+                memory_output_stream stream(serialized);
+                any_output_stream astream(stream);
+                CompressionCache cache_for_serialized;
+                serialize_dictionary_batch(
+                    dictionary_id,
+                    record_batch,
+                    is_delta,
+                    astream,
+                    compression,
+                    cache_for_serialized
+                );
+
+                CHECK_EQ(estimated_size, serialized.size());
+            };
+
+            auto dictionary_values = sp::primitive_array<int32_t>({10, 20, 30, 40, 50});
+            auto dictionary_batch = sp::record_batch({{"dictionary_values", sp::array(std::move(dictionary_values))}});
+
+            SUBCASE("Replacement dictionary batch")
+            {
+                test_calculate_dictionary_batch_message_size(dictionary_batch, 42, false, std::nullopt);
+                test_calculate_dictionary_batch_message_size(
+                    dictionary_batch,
+                    42,
+                    false,
+                    CompressionType::LZ4_FRAME
+                );
+                test_calculate_dictionary_batch_message_size(dictionary_batch, 42, false, CompressionType::ZSTD);
+            }
+
+            SUBCASE("Delta dictionary batch")
+            {
+                test_calculate_dictionary_batch_message_size(dictionary_batch, 42, true, std::nullopt);
+                test_calculate_dictionary_batch_message_size(
+                    dictionary_batch,
+                    42,
+                    true,
+                    CompressionType::LZ4_FRAME
+                );
+                test_calculate_dictionary_batch_message_size(dictionary_batch, 42, true, CompressionType::ZSTD);
+            }
+        }
+
         TEST_CASE("calculate_total_serialized_size")
         {
             auto test_calculate_total_serialized_size = [](const std::vector<sp::record_batch>& batches, std::optional<CompressionType> compression)

@@ -23,13 +23,6 @@ namespace sparrow_ipc
         const dictionary_cache& dictionaries
     );
 
-    void resolve_child_dictionaries_in_place(
-        ArrowArray& array,
-        ArrowSchema& schema,
-        const org::apache::arrow::flatbuf::Field& field,
-        const dictionary_cache& dictionaries
-    );
-
     sparrow::array apply_dictionary_encoding(
         sparrow::array index_array,
         const org::apache::arrow::flatbuf::Field& field,

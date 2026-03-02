@@ -64,6 +64,34 @@ namespace sparrow_ipc
                                         std::optional<std::reference_wrapper<CompressionCache>> cache = std::nullopt);
 
     /**
+     * @brief Calculates the total serialized size of a dictionary batch message.
+     *
+     * This function computes the complete size that would be produced by
+     * serialize_dictionary_batch(), including:
+     * - Continuation bytes (4 bytes)
+     * - Message length prefix (4 bytes)
+     * - FlatBuffer dictionary batch metadata
+     * - Padding to 8-byte alignment after metadata
+     * - Body data with 8-byte alignment between buffers
+     *
+     * @param dictionary_id The unique identifier for the dictionary.
+     * @param record_batch A single-column record batch containing dictionary values.
+     * @param is_delta Whether this dictionary batch is a delta update.
+     * @param compression Optional: The compression type to use when serializing.
+     * @param cache Optional: A cache to store and retrieve compressed buffer sizes, avoiding recompression.
+     * If compression is given, cache should be set as well.
+     * @return The total size in bytes that the serialized dictionary batch would occupy.
+     */
+    [[nodiscard]] SPARROW_IPC_API std::size_t
+    calculate_dictionary_batch_message_size(
+        int64_t dictionary_id,
+        const sparrow::record_batch& record_batch,
+        bool is_delta,
+        std::optional<CompressionType> compression = std::nullopt,
+        std::optional<std::reference_wrapper<CompressionCache>> cache = std::nullopt
+    );
+
+    /**
      * @brief Calculates the total serialized size for a collection of record batches.
      *
      * This function computes the complete size that would be produced by serializing

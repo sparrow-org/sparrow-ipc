@@ -14,8 +14,8 @@ namespace sparrow_ipc
      * @brief Caches dictionaries during deserialization.
      *
      * This class stores dictionaries received from DictionaryBatch messages and
-        * provides them when reconstructing dictionary-encoded arrays. Delta updates
-        * append dictionary values to existing dictionaries with the same ID.
+     * provides them when reconstructing dictionary-encoded arrays. Delta updates
+     * append dictionary values to existing dictionaries with the same ID.
      *
      * Dictionaries are stored as single-column record batches and are referenced
      * by their integer ID. Multiple fields can share the same dictionary by

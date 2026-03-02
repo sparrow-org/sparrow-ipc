@@ -1,5 +1,4 @@
 #include <cstddef>
-#include <numeric>
 
 #include <sparrow/record_batch.hpp>
 
@@ -8,6 +7,7 @@
 #include "sparrow_ipc/dictionary_tracker.hpp"
 #include "sparrow_ipc/serialize.hpp"
 #include "sparrow_ipc/serialize_utils.hpp"
+#include "sparrow_ipc/serializer_reserve.hpp"
 
 namespace sparrow_ipc
 {
@@ -46,7 +46,8 @@ namespace sparrow_ipc
          */
         template <writable_stream TStream>
         serializer(TStream& stream, std::optional<CompressionType> compression = std::nullopt)
-            : m_stream(stream), m_compression(compression)
+            : m_stream(stream)
+            , m_compression(compression)
         {
         }
 
@@ -97,34 +98,18 @@ namespace sparrow_ipc
             }
 
             // NOTE `reserve_function` is making us store a cache for the compressed buffers at this level.
-            // The benefit of capacity allocation should be evaluated vs storing a cache of compressed buffers of record batches.
+            // The benefit of capacity allocation should be evaluated vs storing a cache of compressed buffers
+            // of record batches.
             const auto reserve_function = [&record_batches, &compressed_buffers_cache, this]()
             {
-                dictionary_tracker reservation_tracker = m_dict_tracker;
-                return std::accumulate(
-                           record_batches.begin(),
-                           record_batches.end(),
-                           m_stream.size(),
-                           [&compressed_buffers_cache, &reservation_tracker, this](size_t acc, const sparrow::record_batch& rb)
-                           {
-                               size_t dictionaries_size = 0;
-                               const auto dictionaries = reservation_tracker.extract_dictionaries_from_batch(rb);
-                               for (const auto& dict_info : dictionaries)
-                               {
-                                   dictionaries_size += calculate_record_batch_message_size(
-                                       dict_info.data,
-                                       m_compression,
-                                       compressed_buffers_cache
-                                   );
-                                   reservation_tracker.mark_emitted(dict_info.id);
-                               }
-
-                               return acc
-                                      + dictionaries_size
-                                      + calculate_record_batch_message_size(rb, m_compression, compressed_buffers_cache);
-                           }
-                       )
-                       + (m_schema_received ? 0 : calculate_schema_message_size(*record_batches.begin()));
+                return calculate_serializer_reserve_size(
+                    record_batches,
+                    m_stream.size(),
+                    m_schema_received,
+                    m_compression,
+                    m_dict_tracker,
+                    compressed_buffers_cache
+                );
             };
 
             m_stream.reserve(reserve_function);
@@ -142,7 +127,7 @@ namespace sparrow_ipc
                 {
                     throw std::invalid_argument("Record batch schema does not match serializer schema");
                 }
-                
+
                 // Extract and emit dictionaries before the record batch
                 auto dictionaries = m_dict_tracker.extract_dictionaries_from_batch(rb);
                 for (const auto& dict_info : dictionaries)
@@ -157,7 +142,7 @@ namespace sparrow_ipc
                     );
                     m_dict_tracker.mark_emitted(dict_info.id);
                 }
-                
+
                 serialize_record_batch(rb, m_stream, m_compression, compressed_buffers_cache);
             }
         }
@@ -224,7 +209,7 @@ namespace sparrow_ipc
          * serializer ser(stream);
          * ser << batch1 << batch2 << end_stream;
          */
-        serializer& operator<<(serializer& (*manip)(serializer&))
+        serializer& operator<<(serializer& (*manip)(serializer&) )
         {
             return manip(*this);
         }

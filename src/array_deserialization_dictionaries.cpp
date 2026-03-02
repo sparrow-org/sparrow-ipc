@@ -1,7 +1,12 @@
 #include "array_deserialization_dictionaries.hpp"
+
+#include <algorithm>
+#include <string>
+
 #include "array_deserializer.hpp"
 
-namespace sparrow_ipc{
+namespace sparrow_ipc
+{
     void attach_dictionary_to_field_if_needed(
         ArrowArray& array,
         ArrowSchema& schema,

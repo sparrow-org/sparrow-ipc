@@ -17,7 +17,8 @@ namespace sparrow_ipc
         const auto field_hash = std::hash<std::string_view>{}(field_name);
         const auto index_hash = std::hash<size_t>{}(field_index + 1);
         const auto combined = field_hash
-                              ^ (index_hash + hash_combine_golden_ratio_64 + (field_hash << 6) + (field_hash >> 2));
+                              ^ (index_hash + hash_combine_golden_ratio_64 + (field_hash << 6)
+                                 + (field_hash >> 2));
         return static_cast<int64_t>(combined);
     }
 
@@ -35,7 +36,17 @@ namespace sparrow_ipc
         {
             if (key == "ARROW:dictionary:id")
             {
-                metadata.id = std::stoll(std::string(value));
+                try
+                {
+                    metadata.id = std::stoll(std::string(value));
+                }
+                catch (const std::exception& e)
+                {
+                    throw std::runtime_error(
+                        "Failed to parse dictionary ID from metadata value '" + std::string(value)
+                        + "': " + e.what()
+                    );
+                }
             }
             else if (key == "ARROW:dictionary:ordered")
             {
