@@ -59,7 +59,7 @@ const std::vector<std::filesystem::path> files_paths_to_test = {
     tests_resources_files_path / "generated_list_view",
     tests_resources_files_path / "generated_dictionary",
     tests_resources_files_path / "generated_dictionary_unsigned",
-    tests_resources_files_path / "generated_nested_dictionary.json"
+    tests_resources_files_path / "generated_nested_dictionary"
 };
 
 const std::vector<std::filesystem::path> files_paths_to_test_with_lz4_compression = {

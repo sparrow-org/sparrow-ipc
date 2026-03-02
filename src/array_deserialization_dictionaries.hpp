@@ -1,3 +1,5 @@
+#pragma once
+
 #include <sparrow/array_api.hpp>
 #include <sparrow/arrow_interface/arrow_array.hpp>
 
