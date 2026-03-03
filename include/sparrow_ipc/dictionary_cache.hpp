@@ -52,19 +52,19 @@ namespace sparrow_ipc
          * @param id The dictionary ID to check
          * @return true if the dictionary exists in the cache, false otherwise
          */
-        bool contains(int64_t id) const;
+        [[nodiscard]] bool contains(int64_t id) const noexcept;
 
         /**
          * @brief Clear all cached dictionaries.
          */
-        void clear();
+        void clear() noexcept;
 
         /**
          * @brief Get the number of cached dictionaries.
          *
          * @return The number of dictionaries in the cache
          */
-        size_t size() const;
+        [[nodiscard]] size_t size() const noexcept ;
 
     private:
         std::map<int64_t, sparrow::record_batch> m_dictionaries;

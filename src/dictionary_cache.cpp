@@ -156,17 +156,17 @@ namespace sparrow_ipc
         return std::nullopt;
     }
 
-    bool dictionary_cache::contains(int64_t id) const
+    bool dictionary_cache::contains(int64_t id) const noexcept
     {
         return m_dictionaries.contains(id);
     }
 
-    void dictionary_cache::clear()
+    void dictionary_cache::clear() noexcept
     {
         m_dictionaries.clear();
     }
 
-    size_t dictionary_cache::size() const
+    size_t dictionary_cache::size() const noexcept
     {
         return m_dictionaries.size();
     }

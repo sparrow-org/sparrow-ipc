@@ -47,7 +47,7 @@ namespace sparrow_ipc
          * @param batch The record batch to scan for dictionaries
          * @return Vector of dictionary_info for dictionaries that haven't been emitted yet
          */
-        std::vector<dictionary_info> extract_dictionaries_from_batch(const sparrow::record_batch& batch);
+        [[nodiscard]] std::vector<dictionary_info> extract_dictionaries_from_batch(const sparrow::record_batch& batch);
 
         /**
          * @brief Mark a dictionary as emitted.
@@ -58,7 +58,7 @@ namespace sparrow_ipc
          *
          * @param id The dictionary ID that was emitted
          */
-        void mark_emitted(int64_t id);
+        void mark_emitted(int64_t id) noexcept;
 
         /**
          * @brief Check if a dictionary has been emitted.
@@ -66,14 +66,14 @@ namespace sparrow_ipc
          * @param id The dictionary ID to check
          * @return true if the dictionary has been emitted, false otherwise
          */
-        bool is_emitted(int64_t id) const;
+        [[nodiscard]] bool is_emitted(int64_t id) const noexcept;
 
         /**
          * @brief Reset tracking state.
          *
          * Clears all tracking information. Useful when starting a new stream.
          */
-        void reset();
+        void reset() noexcept;
 
     private:
         std::set<int64_t> m_emitted_dict_ids;  ///< IDs of dictionaries already emitted

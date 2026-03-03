@@ -55,7 +55,7 @@ namespace sparrow_ipc
             const std::unordered_map<int64_t, const org::apache::arrow::flatbuf::Field*>& dictionary_fields
         )
         {
-            const auto* dict_record_batch = dictionary_batch.data();
+            const org::apache::arrow::flatbuf::RecordBatch* dict_record_batch = dictionary_batch.data();
             if (dict_record_batch == nullptr)
             {
                 throw std::runtime_error("DictionaryBatch message has null RecordBatch data");
@@ -70,7 +70,7 @@ namespace sparrow_ipc
                 );
             }
 
-            const auto* field = field_it->second;
+            const org::apache::arrow::flatbuf::Field* field = field_it->second;
             std::optional<std::vector<sparrow::metadata_pair>> metadata;
             if (field->custom_metadata() != nullptr)
             {
