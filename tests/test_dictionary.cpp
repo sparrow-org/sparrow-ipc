@@ -165,7 +165,7 @@ TEST_SUITE("Dictionary support")
         CHECK_NE(rb1.get_column(0)[2], rb0.get_column(0)[2]);   // "E" != "C"
     }
 
-    TEST_CASE("Serializer re-emits changed dictionary for same id")
+    TEST_CASE("Serializer rejects changed dictionary for same id without delta")
     {
         namespace sp = sparrow;
         using dict_array_t = sp::dictionary_encoded_array<int8_t>;
@@ -187,17 +187,11 @@ TEST_SUITE("Dictionary support")
         std::vector<uint8_t> bytes;
         sparrow_ipc::memory_output_stream mem_stream(bytes);
         sparrow_ipc::serializer serializer(mem_stream);
-        serializer << std::vector<sp::record_batch>{batch0, batch1} << sparrow_ipc::end_stream;
-
-        const auto result = sparrow_ipc::deserialize_stream(std::span<const uint8_t>(bytes));
-        REQUIRE_EQ(result.size(), size_t{2});
-
-        const auto& rb0 = result[0];
-        const auto& rb1 = result[1];
-        REQUIRE_EQ(rb0.nb_rows(), size_t{4});
-        REQUIRE_EQ(rb1.nb_rows(), size_t{4});
-        CHECK_EQ(rb1.get_column(0)[1], rb0.get_column(0)[2]);
-        CHECK_EQ(rb1.get_column(0)[3], rb0.get_column(0)[0]);
-        CHECK_NE(rb1.get_column(0)[0], rb0.get_column(0)[2]);
+        const std::vector<sp::record_batch> batches{batch0, batch1};
+        CHECK_THROWS_WITH_AS(
+            serializer << batches << sparrow_ipc::end_stream,
+            "Dictionary id 0 was already emitted with size 3 but now has size 5. Use delta dictionary updates for dictionary growth.",
+            std::runtime_error
+        );
     }
 }

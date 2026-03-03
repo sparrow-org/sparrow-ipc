@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cstdint>
-#include <cstddef>
 #include <set>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -77,7 +77,8 @@ namespace sparrow_ipc
 
     private:
         std::set<int64_t> m_emitted_dict_ids;  ///< IDs of dictionaries already emitted
-        std::unordered_map<int64_t, std::size_t> m_emitted_dict_fingerprints;
-        std::unordered_map<int64_t, std::size_t> m_pending_dict_fingerprints;
+        std::unordered_map<int64_t, std::string> m_dictionary_id_origins;
+        std::unordered_map<int64_t, std::size_t> m_emitted_dict_sizes;
+        std::unordered_map<int64_t, std::size_t> m_pending_dict_sizes;
     };
 }

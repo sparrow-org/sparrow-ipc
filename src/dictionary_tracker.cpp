@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <ranges>
 #include <span>
 #include <string>
@@ -21,94 +20,15 @@ namespace sparrow_ipc
 {
     namespace
     {
-        constexpr std::size_t fnv_offset_basis = 1469598103934665603ULL;
-        constexpr std::size_t fnv_prime = 1099511628211ULL;
-        constexpr std::size_t hash_combine_magic = 0x9e3779b97f4a7c15ULL;
-        constexpr unsigned hash_combine_left_shift = 6U;
-        constexpr unsigned hash_combine_right_shift = 2U;
-
-        std::size_t hash_bytes(std::span<const uint8_t> bytes)
+        struct dictionary_id_result
         {
-            std::size_t hash = fnv_offset_basis;
-            for (uint8_t byte : bytes)
-            {
-                hash ^= static_cast<std::size_t>(byte);
-                hash *= fnv_prime;
-            }
-            return hash;
-        }
+            int64_t id;
+            bool from_metadata;
+        };
 
-        void hash_combine(std::size_t& seed, std::size_t value)
-        {
-            seed ^= value + hash_combine_magic
-                    + (seed << hash_combine_left_shift)
-                    + (seed >> hash_combine_right_shift);
-        }
-
-        std::size_t hash_schema_shape(const ArrowSchema& schema)
-        {
-            std::size_t seed = fnv_offset_basis;
-
-            if (schema.format != nullptr)
-            {
-                hash_combine(seed, std::hash<std::string_view>{}(schema.format));
-            }
-            if (schema.name != nullptr)
-            {
-                hash_combine(seed, std::hash<std::string_view>{}(schema.name));
-            }
-            hash_combine(seed, static_cast<std::size_t>(schema.flags));
-            hash_combine(seed, static_cast<std::size_t>(schema.n_children));
-
-            return seed;
-        }
-
-        std::size_t hash_array_content_recursive(const sparrow::arrow_proxy& proxy)
-        {
-            std::size_t seed = hash_schema_shape(proxy.schema());
-
-            hash_combine(seed, static_cast<std::size_t>(proxy.length()));
-            hash_combine(seed, static_cast<std::size_t>(proxy.null_count()));
-            hash_combine(seed, static_cast<std::size_t>(proxy.offset()));
-            hash_combine(seed, static_cast<std::size_t>(proxy.n_buffers()));
-            hash_combine(seed, static_cast<std::size_t>(proxy.n_children()));
-
-            for (const auto& buffer : proxy.buffers())
-            {
-                hash_combine(seed, buffer.size());
-                if (!buffer.empty())
-                {
-                    hash_combine(seed, hash_bytes(buffer));
-                }
-            }
-
-            for (const auto& child : proxy.children())
-            {
-                hash_combine(seed, hash_array_content_recursive(child));
-            }
-
-            return seed;
-        }
-
-        std::size_t compute_dictionary_fingerprint(const sparrow::array& dictionary_values)
-        {
-            const auto& dictionary_proxy = sparrow::detail::array_access::get_arrow_proxy(dictionary_values);
-            return hash_array_content_recursive(dictionary_proxy);
-        }
-
-        /**
-         * @brief Extract dictionary ID from ArrowSchema metadata.
-         *
-         * The dictionary ID can be stored in the schema's metadata with key "ARROW:dictionary:id".
-         * If not found, we generate an ID from a stable hash of the field name.
-         *
-         * @param schema The ArrowSchema to extract ID from
-         * @return The dictionary ID
-         */
-        int64_t extract_dictionary_id(
+        dictionary_id_result extract_dictionary_id(
             const ArrowSchema* schema,
-            std::string_view fallback_name,
-            size_t fallback_index
+            int64_t& next_fallback_dictionary_id
         )
         {
             if (schema == nullptr || schema->dictionary == nullptr)
@@ -116,23 +36,37 @@ namespace sparrow_ipc
                 throw std::invalid_argument("Schema must have a dictionary");
             }
 
-            // Try to extract from metadata first
             const auto metadata = parse_dictionary_metadata(*schema);
             if (metadata.id.has_value())
             {
-                return *metadata.id;
+                return {.id = *metadata.id, .from_metadata = true};
             }
 
-            // Fallback: use stable hash of field name
-            return compute_fallback_dictionary_id(fallback_name, fallback_index);
+            return {.id = next_fallback_dictionary_id++, .from_metadata = false};
         }
 
-        /**
-         * @brief Check if ArrowSchema has dictionary encoding.
-         *
-         * @param schema The ArrowSchema to check
-         * @return true if the schema has dictionary encoding, false otherwise
-         */
+        void validate_dictionary_id_origin(
+            int64_t dict_id,
+            std::string_view origin,
+            bool from_metadata,
+            std::unordered_map<int64_t, std::string>& dictionary_id_origins
+        )
+        {
+            if (!from_metadata)
+            {
+                return;
+            }
+
+            const auto [it, inserted] = dictionary_id_origins.try_emplace(dict_id, origin);
+            if (!inserted && it->second != origin)
+            {
+                throw std::runtime_error(
+                    "Duplicate dictionary id " + std::to_string(dict_id)
+                    + " is used by multiple dictionary fields"
+                );
+            }
+        }
+
         bool has_dictionary(const ArrowSchema* schema)
         {
             return schema != nullptr && schema->dictionary != nullptr;
@@ -159,18 +93,27 @@ namespace sparrow_ipc
         void extract_dictionaries_from_array_recursive(
             const ArrowArray& array,
             const ArrowSchema& schema,
-            std::string_view fallback_name,
-            size_t fallback_index,
+            std::string_view field_path,
+            int64_t& next_fallback_dictionary_id,
             const std::set<int64_t>& emitted_dict_ids,
-            const std::unordered_map<int64_t, std::size_t>& emitted_dict_fingerprints,
-            std::unordered_map<int64_t, std::size_t>& pending_dict_fingerprints,
+            const std::unordered_map<int64_t, std::size_t>& emitted_dict_sizes,
+            std::unordered_map<int64_t, std::size_t>& pending_dict_sizes,
+            std::unordered_map<int64_t, std::string>& dictionary_id_origins,
             std::unordered_set<int64_t>& extracted_dict_ids,
             std::vector<dictionary_info>& dictionaries
         )
         {
             if (has_dictionary(&schema))
             {
-                const int64_t dict_id = extract_dictionary_id(&schema, fallback_name, fallback_index);
+                const auto dictionary_id = extract_dictionary_id(&schema, next_fallback_dictionary_id);
+                const int64_t dict_id = dictionary_id.id;
+                validate_dictionary_id_origin(
+                    dict_id,
+                    field_path,
+                    dictionary_id.from_metadata,
+                    dictionary_id_origins
+                );
+
                 ArrowSchema* dict_schema = schema.dictionary;
                 if (array.dictionary == nullptr)
                 {
@@ -180,25 +123,21 @@ namespace sparrow_ipc
                 }
 
                 auto dictionary_values = sparrow::array(array.dictionary, dict_schema);
-                const std::size_t dictionary_fingerprint = compute_dictionary_fingerprint(dictionary_values);
+                const std::size_t dictionary_size = dictionary_values.size();
 
-                bool should_emit = !extracted_dict_ids.contains(dict_id);
-                bool is_delta = false;
-                if (should_emit)
+                bool should_emit = !extracted_dict_ids.contains(dict_id)
+                                   && !emitted_dict_ids.contains(dict_id);
+                if (!should_emit && emitted_dict_ids.contains(dict_id) && !extracted_dict_ids.contains(dict_id))
                 {
-                    const bool emitted_before = emitted_dict_ids.contains(dict_id);
-                    if (emitted_before)
+                    if (const auto emitted_it = emitted_dict_sizes.find(dict_id);
+                        emitted_it != emitted_dict_sizes.end() && emitted_it->second != dictionary_size)
                     {
-                        const auto fingerprint_it = emitted_dict_fingerprints.find(dict_id);
-                        if (fingerprint_it != emitted_dict_fingerprints.end())
-                        {
-                            should_emit = fingerprint_it->second != dictionary_fingerprint;
-                            is_delta = false;
-                        }
-                        else
-                        {
-                            should_emit = false;
-                        }
+                        throw std::runtime_error(
+                            "Dictionary id " + std::to_string(dict_id)
+                            + " was already emitted with size " + std::to_string(emitted_it->second)
+                            + " but now has size " + std::to_string(dictionary_size)
+                            + ". Use delta dictionary updates for dictionary growth."
+                        );
                     }
                 }
 
@@ -223,23 +162,25 @@ namespace sparrow_ipc
                             .id = dict_id,
                             .data = sparrow::record_batch(std::move(dict_names), std::move(dict_arrays)),
                             .is_ordered = is_ordered,
-                            .is_delta = is_delta
+                            .is_delta = false
                         }
                     );
                     extracted_dict_ids.insert(dict_id);
-                    pending_dict_fingerprints.insert_or_assign(dict_id, dictionary_fingerprint);
+                    pending_dict_sizes.insert_or_assign(dict_id, dictionary_size);
                 }
 
                 if (schema.dictionary != nullptr && array.dictionary != nullptr)
                 {
+                    const std::string dictionary_path = std::string(field_path) + "/dictionary";
                     extract_dictionaries_from_array_recursive(
                         *array.dictionary,
                         *schema.dictionary,
-                        fallback_name,
-                        0,
+                        dictionary_path,
+                        next_fallback_dictionary_id,
                         emitted_dict_ids,
-                        emitted_dict_fingerprints,
-                        pending_dict_fingerprints,
+                        emitted_dict_sizes,
+                        pending_dict_sizes,
+                        dictionary_id_origins,
                         extracted_dict_ids,
                         dictionaries
                     );
@@ -267,14 +208,20 @@ namespace sparrow_ipc
                 }
 
                 const std::string child_name = get_child_field_name(schema, child_index);
+                const std::string child_path = std::string(field_path)
+                                               + "/"
+                                               + std::to_string(child_index)
+                                               + ":"
+                                               + child_name;
                 extract_dictionaries_from_array_recursive(
                     *child_array,
                     *child_schema,
-                    child_name,
-                    child_index,
+                    child_path,
+                    next_fallback_dictionary_id,
                     emitted_dict_ids,
-                    emitted_dict_fingerprints,
-                    pending_dict_fingerprints,
+                    emitted_dict_sizes,
+                    pending_dict_sizes,
+                    dictionary_id_origins,
                     extracted_dict_ids,
                     dictionaries
                 );
@@ -291,7 +238,8 @@ namespace sparrow_ipc
         const auto& columns = batch.columns();
         const auto& names = batch.names();
         std::unordered_set<int64_t> extracted_dict_ids;
-        m_pending_dict_fingerprints.clear();
+        int64_t next_fallback_dictionary_id = 0;
+        m_pending_dict_sizes.clear();
 
         // Scan each column for dictionary encoding
         for (size_t column_idx = 0; column_idx < columns.size(); ++column_idx)
@@ -314,15 +262,17 @@ namespace sparrow_ipc
                 );
                 return std::string_view(*name_it);
             }();
+            const std::string field_path = std::string(fallback_name);
 
             extract_dictionaries_from_array_recursive(
                 array,
                 schema,
-                fallback_name,
-                column_idx,
+                field_path,
+                next_fallback_dictionary_id,
                 m_emitted_dict_ids,
-                m_emitted_dict_fingerprints,
-                m_pending_dict_fingerprints,
+                m_emitted_dict_sizes,
+                m_pending_dict_sizes,
+                m_dictionary_id_origins,
                 extracted_dict_ids,
                 dictionaries
             );
@@ -334,11 +284,11 @@ namespace sparrow_ipc
     void dictionary_tracker::mark_emitted(int64_t id) noexcept
     {
         m_emitted_dict_ids.insert(id);
-        if (const auto pending_it = m_pending_dict_fingerprints.find(id);
-            pending_it != m_pending_dict_fingerprints.end())
+        if (const auto pending_it = m_pending_dict_sizes.find(id);
+            pending_it != m_pending_dict_sizes.end())
         {
-            m_emitted_dict_fingerprints.insert_or_assign(id, pending_it->second);
-            m_pending_dict_fingerprints.erase(pending_it);
+            m_emitted_dict_sizes.insert_or_assign(id, pending_it->second);
+            m_pending_dict_sizes.erase(pending_it);
         }
     }
 
@@ -350,7 +300,8 @@ namespace sparrow_ipc
     void dictionary_tracker::reset() noexcept
     {
         m_emitted_dict_ids.clear();
-        m_emitted_dict_fingerprints.clear();
-        m_pending_dict_fingerprints.clear();
+        m_dictionary_id_origins.clear();
+        m_emitted_dict_sizes.clear();
+        m_pending_dict_sizes.clear();
     }
 }

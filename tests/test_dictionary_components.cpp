@@ -252,7 +252,7 @@ TEST_SUITE("dictionary_components")
         CHECK_FALSE(after_reset.empty());
     }
 
-    TEST_CASE("dictionary_tracker re-emits dictionary when values change for same id")
+    TEST_CASE("dictionary_tracker rejects changed dictionary size for emitted id")
     {
         sparrow_ipc::dictionary_tracker tracker;
         using dict_array_t = sp::dictionary_encoded_array<int8_t>;
@@ -276,15 +276,11 @@ TEST_SUITE("dictionary_components")
                 sp::array(sp::string_array(std::vector<std::string>{"A", "B", "C", "D", "E"}))
             ))}}
         );
-        const auto changed = tracker.extract_dictionaries_from_batch(extended_batch);
-
-        REQUIRE_EQ(changed.size(), size_t{1});
-        CHECK_EQ(changed[0].id, dict_id);
-        CHECK_FALSE(changed[0].is_delta);
-
-        tracker.mark_emitted(dict_id);
-        const auto unchanged_after_emit = tracker.extract_dictionaries_from_batch(extended_batch);
-        CHECK(unchanged_after_emit.empty());
+        CHECK_THROWS_WITH_AS(
+            (void) tracker.extract_dictionaries_from_batch(extended_batch),
+            "Dictionary id 0 was already emitted with size 3 but now has size 5. Use delta dictionary updates for dictionary growth.",
+            std::runtime_error
+        );
     }
 
     TEST_CASE("dictionary_tracker returns empty for non-dictionary record batch")
@@ -293,6 +289,38 @@ TEST_SUITE("dictionary_components")
         const auto batch = create_non_dictionary_batch();
         const auto extracted = tracker.extract_dictionaries_from_batch(batch);
         CHECK(extracted.empty());
+    }
+
+    TEST_CASE("dictionary_tracker throws when metadata dictionary id is reused by another field")
+    {
+        using dict_array_t = sp::dictionary_encoded_array<int8_t>;
+
+        sp::array first_dict_col = sp::array(dict_array_t(
+            dict_array_t::keys_buffer_type{0, 1, 2, 1},
+            sp::array(sp::string_array(std::vector<std::string>{"A", "B", "C"}))
+        ));
+        first_dict_col.set_metadata(
+            std::make_optional(std::vector<sp::metadata_pair>{{"ARROW:dictionary:id", "42"}})
+        );
+
+        sp::array second_dict_col = sp::array(dict_array_t(
+            dict_array_t::keys_buffer_type{0, 1, 0, 1},
+            sp::array(sp::string_array(std::vector<std::string>{"X", "Y"}))
+        ));
+        second_dict_col.set_metadata(
+            std::make_optional(std::vector<sp::metadata_pair>{{"ARROW:dictionary:id", "42"}})
+        );
+
+        sp::record_batch batch(
+            {{"first", std::move(first_dict_col)}, {"second", std::move(second_dict_col)}}
+        );
+
+        sparrow_ipc::dictionary_tracker tracker;
+        CHECK_THROWS_WITH_AS(
+            (void) tracker.extract_dictionaries_from_batch(batch),
+            "Duplicate dictionary id 42 is used by multiple dictionary fields",
+            std::runtime_error
+        );
     }
 }
 
