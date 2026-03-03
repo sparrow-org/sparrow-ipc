@@ -11,6 +11,31 @@
 
 namespace sparrow_ipc
 {
+    namespace
+    {
+        ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<org::apache::arrow::flatbuf::Field>>>
+        create_children_impl(
+            flatbuffers::FlatBufferBuilder& builder,
+            const ArrowSchema& arrow_schema,
+            int64_t& next_fallback_dictionary_id
+        );
+
+        ::flatbuffers::Offset<org::apache::arrow::flatbuf::Field> create_field_impl(
+            flatbuffers::FlatBufferBuilder& builder,
+            const ArrowSchema& arrow_schema,
+            std::optional<std::string_view> name_override,
+            std::optional<int64_t> dictionary_id_override,
+            int64_t& next_fallback_dictionary_id
+        );
+
+        ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<org::apache::arrow::flatbuf::Field>>>
+        create_children_impl(
+            flatbuffers::FlatBufferBuilder& builder,
+            const sparrow::record_batch& record_batch,
+            int64_t& next_fallback_dictionary_id
+        );
+    }
+
     namespace details
     {
         std::size_t
@@ -473,6 +498,26 @@ namespace sparrow_ipc
         std::optional<int64_t> dictionary_id_override
     )
     {
+        int64_t next_fallback_dictionary_id = 0;
+        return create_field_impl(
+            builder,
+            arrow_schema,
+            name_override,
+            dictionary_id_override,
+            next_fallback_dictionary_id
+        );
+    }
+
+    namespace
+    {
+        ::flatbuffers::Offset<org::apache::arrow::flatbuf::Field> create_field_impl(
+            flatbuffers::FlatBufferBuilder& builder,
+            const ArrowSchema& arrow_schema,
+            std::optional<std::string_view> name_override,
+            std::optional<int64_t> dictionary_id_override,
+            int64_t& next_fallback_dictionary_id
+        )
+        {
         const bool is_dictionary_encoded = arrow_schema.dictionary != nullptr;
         const ArrowSchema& value_schema = is_dictionary_encoded ? *arrow_schema.dictionary : arrow_schema;
 
@@ -484,7 +529,6 @@ namespace sparrow_ipc
         flatbuffers::Offset<flatbuffers::String> fb_name_offset = builder.CreateString(field_name);
         const auto [type_enum, type_offset] = get_flatbuffer_type(builder, value_schema.format);
         auto fb_metadata_offset = create_metadata(builder, arrow_schema);
-        const auto children = create_children(builder, value_schema);
 
         // Handle dictionary encoding
         flatbuffers::Offset<org::apache::arrow::flatbuf::DictionaryEncoding> dictionary_offset = 0;
@@ -494,10 +538,8 @@ namespace sparrow_ipc
             const auto dict_metadata = parse_dictionary_metadata(arrow_schema);
             const bool is_ordered = dict_metadata.is_ordered;
 
-            // If no ID in metadata, use the provided override or compute a fallback
-            const int64_t fallback_id = dictionary_id_override.value_or(
-                compute_fallback_dictionary_id(field_name, 0)
-            );
+            // If no ID in metadata, use the provided override or a traversal-based incremental fallback ID
+            const int64_t fallback_id = dictionary_id_override.value_or(next_fallback_dictionary_id++);
             const int64_t dict_id = dict_metadata.id.value_or(fallback_id);
 
             // Create index type from the schema's format (the indices type)
@@ -544,6 +586,8 @@ namespace sparrow_ipc
             );
         }
 
+        const auto children = create_children_impl(builder, value_schema, next_fallback_dictionary_id);
+
         const auto fb_field = org::apache::arrow::flatbuf::CreateField(
             builder,
             fb_name_offset,
@@ -556,10 +600,24 @@ namespace sparrow_ipc
         );
         return fb_field;
     }
+    }
 
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<org::apache::arrow::flatbuf::Field>>>
     create_children(flatbuffers::FlatBufferBuilder& builder, const ArrowSchema& arrow_schema)
     {
+        int64_t next_fallback_dictionary_id = 0;
+        return create_children_impl(builder, arrow_schema, next_fallback_dictionary_id);
+    }
+
+    namespace
+    {
+        ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<org::apache::arrow::flatbuf::Field>>>
+        create_children_impl(
+            flatbuffers::FlatBufferBuilder& builder,
+            const ArrowSchema& arrow_schema,
+            int64_t& next_fallback_dictionary_id
+        )
+        {
         std::vector<flatbuffers::Offset<org::apache::arrow::flatbuf::Field>> children_vec;
         children_vec.reserve(arrow_schema.n_children);
         for (size_t i = 0; i < arrow_schema.n_children; ++i)
@@ -574,17 +632,36 @@ namespace sparrow_ipc
                                                : (arrow_schema.name != nullptr ? std::string(arrow_schema.name)
                                                                                : "base")
                                                      + "_child_" + std::to_string(i);
-            const int64_t fallback_dict_id = compute_fallback_dictionary_id(field_name, i);
             flatbuffers::Offset<org::apache::arrow::flatbuf::Field>
-                field = create_field(builder, child, field_name, fallback_dict_id);
+                field = create_field_impl(
+                    builder,
+                    child,
+                    field_name,
+                    std::nullopt,
+                    next_fallback_dictionary_id
+                );
             children_vec.emplace_back(field);
         }
         return children_vec.empty() ? 0 : builder.CreateVector(children_vec);
+    }
     }
 
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<org::apache::arrow::flatbuf::Field>>>
     create_children(flatbuffers::FlatBufferBuilder& builder, const sparrow::record_batch& record_batch)
     {
+        int64_t next_fallback_dictionary_id = 0;
+        return create_children_impl(builder, record_batch, next_fallback_dictionary_id);
+    }
+
+    namespace
+    {
+        ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<org::apache::arrow::flatbuf::Field>>>
+        create_children_impl(
+            flatbuffers::FlatBufferBuilder& builder,
+            const sparrow::record_batch& record_batch,
+            int64_t& next_fallback_dictionary_id
+        )
+        {
         const auto& columns = record_batch.columns();
         std::vector<flatbuffers::Offset<org::apache::arrow::flatbuf::Field>> children_vec;
         children_vec.reserve(columns.size());
@@ -593,12 +670,18 @@ namespace sparrow_ipc
         {
             const auto& arrow_schema = sparrow::detail::array_access::get_arrow_proxy(columns[i]).schema();
             const auto& field_name = names[i];
-            const int64_t fallback_dict_id = compute_fallback_dictionary_id(field_name, i);
             flatbuffers::Offset<org::apache::arrow::flatbuf::Field>
-                field = create_field(builder, arrow_schema, field_name, fallback_dict_id);
+                field = create_field_impl(
+                    builder,
+                    arrow_schema,
+                    field_name,
+                    std::nullopt,
+                    next_fallback_dictionary_id
+                );
             children_vec.emplace_back(field);
         }
         return children_vec.empty() ? 0 : builder.CreateVector(children_vec);
+    }
     }
 
     flatbuffers::FlatBufferBuilder get_schema_message_builder(const sparrow::record_batch& record_batch)
