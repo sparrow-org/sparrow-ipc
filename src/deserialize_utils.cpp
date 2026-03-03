@@ -51,4 +51,23 @@ namespace sparrow_ipc::utils
             return buffer_span;
         }
     }
+
+    std::optional<std::unordered_set<sparrow::ArrowFlag>> get_sparrow_flags(const org::apache::arrow::flatbuf::Field& field)
+    {
+        std::unordered_set<sparrow::ArrowFlag> flags;
+        if (field.nullable())
+        {
+            flags.insert(sparrow::ArrowFlag::NULLABLE);
+        }
+        if (field.type_type() == org::apache::arrow::flatbuf::Type::Map)
+        {
+            const auto* map_type = field.type_as_Map();
+            if (map_type && map_type->keysSorted())
+            {
+                flags.insert(sparrow::ArrowFlag::MAP_KEYS_SORTED);
+            }
+        }
+        // TODO DICTIONARY_ORDERED not handled yet
+        return flags.empty() ? std::nullopt : std::make_optional(std::move(flags));
+    }
 }

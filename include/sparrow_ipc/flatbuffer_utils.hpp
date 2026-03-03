@@ -27,7 +27,11 @@ namespace sparrow_ipc
     // Creates a Flatbuffers type from a format string
     // This function maps a sparrow data type to the corresponding Flatbuffers type
     [[nodiscard]] std::pair<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>>
-    get_flatbuffer_type(flatbuffers::FlatBufferBuilder& builder, std::string_view format_str);
+    get_flatbuffer_type(
+        flatbuffers::FlatBufferBuilder& builder,
+        std::string_view format_str,
+        const std::optional<std::unordered_set<sparrow::ArrowFlag>>& flags = std::nullopt
+    );
 
     /**
      * @brief Creates a FlatBuffers vector of KeyValue pairs from ArrowSchema metadata.

@@ -42,12 +42,6 @@ namespace sparrow_ipc
         ++context.node_index;  // Consume one FieldNode for this run-end encoded array (parent)
         constexpr size_t n_children = 2;
 
-        std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
-        if (field_desc.nullable)
-        {
-            flags = std::unordered_set<sparrow::ArrowFlag>{sparrow::ArrowFlag::NULLABLE};
-        }
-
         if (!field_desc.field.children() || field_desc.field.children()->size() != n_children)
         {
             throw std::runtime_error(
@@ -96,7 +90,7 @@ namespace sparrow_ipc
             encoded_length,
             run_ends_field->name()->str(),
             std::move(run_ends_metadata),
-            run_ends_field->nullable(),
+            utils::get_sparrow_flags(*run_ends_field),
             true,
             *run_ends_field,
             field_desc.dictionaries
@@ -132,7 +126,7 @@ namespace sparrow_ipc
             encoded_length,  // Same encoded length as run ends
             values_field->name()->str(),
             std::move(values_metadata),
-            values_field->nullable(),
+            utils::get_sparrow_flags(*values_field),
             true,
             *values_field,
             field_desc.dictionaries
@@ -155,7 +149,7 @@ namespace sparrow_ipc
             format,
             field_desc.name,
             field_desc.metadata,
-            flags,
+            field_desc.flags,
             n_children,
             schema_children,
             nullptr

@@ -100,7 +100,7 @@ namespace sparrow_ipc
                 dict_record_batch->length(),
                 std::move(field_name),
                 std::move(metadata),
-                field->nullable(),
+                utils::get_sparrow_flags(*field),
                 false,
                 *field,
                 nullptr // dictionaries
@@ -183,7 +183,7 @@ namespace sparrow_ipc
                 record_batch.length(),
                 std::move(name),
                 field_metadata[field_idx++],
-                field->nullable(),
+                utils::get_sparrow_flags(*field),
                 true,
                 *field,
                 &dictionaries

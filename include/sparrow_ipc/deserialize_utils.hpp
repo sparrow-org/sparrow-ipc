@@ -1,13 +1,17 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <span>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 
 #include <sparrow/buffer/buffer.hpp>
+#include <sparrow/c_interface.hpp>
 
 #include "Message_generated.h"
+#include "Schema_generated.h"
 
 namespace sparrow_ipc::utils
 {
@@ -68,4 +72,13 @@ namespace sparrow_ipc::utils
         std::span<const uint8_t> buffer_span,
         const org::apache::arrow::flatbuf::BodyCompression* compression
     );
+
+    /**
+     * @brief Extract sparrow flags from FlatBuffers Field.
+     *
+     * @param field The FlatBuffers Field object.
+     * @return std::optional<std::unordered_set<sparrow::ArrowFlag>> The sparrow flags.
+     */
+    [[nodiscard]] std::optional<std::unordered_set<sparrow::ArrowFlag>>
+    get_sparrow_flags(const org::apache::arrow::flatbuf::Field& field);
 }

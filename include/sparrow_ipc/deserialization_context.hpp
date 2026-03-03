@@ -3,7 +3,10 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <unordered_set>
 #include <vector>
+
+#include <sparrow/c_interface.hpp>
 
 #include "Schema_generated.h"
 #include "Message_generated.h"
@@ -57,7 +60,7 @@ namespace sparrow_ipc
      * @param length The number of elements in the array to deserialize.
      * @param name The name of the field.
      * @param metadata The metadata associated with the field.
-     * @param nullable Whether the field is nullable.
+     * @param flags The flags associated with the field (e.g., nullable, map keys sorted).
      * @param decode_dictionary_indices Whether dictionary-annotated fields should be read from their
      * physical index buffers (true) or interpreted as logical dictionary values (false).
      * @param field The Flatbuffer Field object describing the array to deserialize.
@@ -68,7 +71,7 @@ namespace sparrow_ipc
         int64_t length;
         std::string name;
         std::optional<std::vector<sparrow::metadata_pair>> metadata;
-        bool nullable;
+        std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
         bool decode_dictionary_indices;
         const org::apache::arrow::flatbuf::Field& field;
         const dictionary_cache* dictionaries = nullptr;
@@ -77,14 +80,14 @@ namespace sparrow_ipc
             int64_t length,
             std::string name,
             std::optional<std::vector<sparrow::metadata_pair>> metadata,
-            bool nullable,
+            std::optional<std::unordered_set<sparrow::ArrowFlag>> flags,
             bool decode_dictionary_indices,
             const org::apache::arrow::flatbuf::Field& field,
             const dictionary_cache* dictionaries)
             : length(length)
             , name(std::move(name))
             , metadata(std::move(metadata))
-            , nullable(nullable)
+            , flags(std::move(flags))
             , decode_dictionary_indices(decode_dictionary_indices)
             , field(field)
             , dictionaries(dictionaries)

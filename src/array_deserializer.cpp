@@ -293,12 +293,6 @@ namespace sparrow_ipc
         )
         {
             ++context.node_index;  // Consume one FieldNode for this fixed-size list array
-            std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
-            if (field_desc.nullable)
-            {
-                flags = {sparrow::ArrowFlag::NULLABLE};
-            }
-
             const auto compression = context.record_batch.compression();
             std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
 
@@ -341,9 +335,9 @@ namespace sparrow_ipc
 
             field_descriptor child_descriptor(
                 child_length,
-                child_field->name()->str(),
+                child_field->name() ? child_field->name()->str() : "",
                 std::move(child_metadata),
-                child_field->nullable(),
+                utils::get_sparrow_flags(*child_field),
                 true,
                 *child_field,
                 field_desc.dictionaries
@@ -368,7 +362,7 @@ namespace sparrow_ipc
                 format,
                 field_desc.name,
                 field_desc.metadata,
-                flags,
+                field_desc.flags,
                 1,
                 schema_children,
                 nullptr
@@ -396,12 +390,6 @@ namespace sparrow_ipc
         )
         {
             ++context.node_index;  // Consume one FieldNode for this struct array
-            std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
-            if (field_desc.nullable)
-            {
-                flags = {sparrow::ArrowFlag::NULLABLE};
-            }
-
             const auto compression = context.record_batch.compression();
             std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
 
@@ -441,9 +429,9 @@ namespace sparrow_ipc
 
                 field_descriptor child_descriptor(
                     field_desc.length,
-                    child_field->name()->str(),
+                    child_field->name() ? child_field->name()->str() : "",
                     std::move(child_metadata),
-                    child_field->nullable(),
+                    utils::get_sparrow_flags(*child_field),
                     true,
                     *child_field,
                     field_desc.dictionaries
@@ -476,7 +464,7 @@ namespace sparrow_ipc
                 format,
                 field_desc.name,
                 field_desc.metadata,
-                flags,
+                field_desc.flags,
                 n_child_arrays,
                 schema_children,
                 nullptr
@@ -522,7 +510,6 @@ namespace sparrow_ipc
     sparrow::array array_deserializer::deserialize_map(
         deserialization_context& context, const field_descriptor& field_desc)
     {
-        // TODO handle the keyssorted in flags (needs a custom test) when true
         return sparrow::array(array_deserializer::deserialize_list_array<sparrow::map_array>(context, field_desc));
     }
 

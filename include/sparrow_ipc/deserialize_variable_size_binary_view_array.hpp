@@ -22,18 +22,11 @@ namespace sparrow_ipc
     {
         const std::string_view format = sparrow::data_type_to_format(sparrow::detail::get_data_type_from_array<T>::get());
 
-        // Set up flags based on nullable
-        std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
-        if (field_desc.nullable)
-        {
-            flags = std::unordered_set<sparrow::ArrowFlag>{sparrow::ArrowFlag::NULLABLE};
-        }
-
         ArrowSchema schema = make_non_owning_arrow_schema(
             format,
             field_desc.name,
             field_desc.metadata,
-            flags,
+            field_desc.flags,
             0,
             nullptr,
             nullptr
