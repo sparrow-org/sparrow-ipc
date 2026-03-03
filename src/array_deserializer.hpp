@@ -51,6 +51,7 @@ namespace sparrow_ipc
             size_t&,
             size_t&,
             size_t&,
+            const dictionary_cache*,
             const org::apache::arrow::flatbuf::Field&
         )>;
 
@@ -89,7 +90,6 @@ namespace sparrow_ipc
                                    const dictionary_cache* dictionaries = nullptr);
     private:
         inline static std::unordered_map<org::apache::arrow::flatbuf::Type, deserializer_func> m_deserializer_map;
-        inline static thread_local const dictionary_cache* m_active_dictionary_cache = nullptr;
 
         /**
          * @bried Populate the map with function pointers to the static
@@ -107,6 +107,7 @@ namespace sparrow_ipc
                                                     size_t& buffer_index,
                                                     size_t& node_index,
                                                     size_t& /*variadic_counts_idx*/,
+                                                    const dictionary_cache* /*dictionaries*/,
                                                     const org::apache::arrow::flatbuf::Field&)
         {
             ++node_index;  // Consume one FieldNode for this primitive array
@@ -125,6 +126,7 @@ namespace sparrow_ipc
                                                                size_t& buffer_index,
                                                                size_t& node_index,
                                                                size_t& /*variadic_counts_idx*/,
+                                                               const dictionary_cache* /*dictionaries*/,
                                                                const org::apache::arrow::flatbuf::Field&)
         {
             ++node_index;  // Consume one FieldNode for this binary array
@@ -143,6 +145,7 @@ namespace sparrow_ipc
                                                                size_t& buffer_index,
                                                                size_t& node_index,
                                                                size_t& variadic_counts_idx,
+                                                               const dictionary_cache* /*dictionaries*/,
                                                                const org::apache::arrow::flatbuf::Field&)
         {
             ++node_index;  // Consume one FieldNode for this binary view array
@@ -169,6 +172,7 @@ namespace sparrow_ipc
             size_t& buffer_index,
             size_t& node_index,
             size_t& variadic_counts_idx,
+            const dictionary_cache* dictionaries,
             const org::apache::arrow::flatbuf::Field& field)
         {
             ++node_index;  // Consume one FieldNode for this list array
@@ -188,7 +192,7 @@ namespace sparrow_ipc
             auto offsets_buffer_span = utils::get_buffer(record_batch, body, buffer_index);
 
             using offset_type = typename T::offset_type;
-            int64_t child_length;
+            int64_t child_length = 0;
 
             if (compression)
             {
@@ -201,16 +205,16 @@ namespace sparrow_ipc
                     processed_offsets
                 );
 
-                buffers.push_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
-                buffers.push_back(std::move(processed_offsets));
+                buffers.emplace_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
+                buffers.emplace_back(std::move(processed_offsets));
             }
             else
             {
                 const auto offsets = reinterpret_cast<const offset_type*>(offsets_buffer_span.data());
                 child_length = offsets[length];
 
-                buffers.push_back(std::move(validity_buffer_span));
-                buffers.push_back(std::move(offsets_buffer_span));
+                buffers.emplace_back(std::move(validity_buffer_span));
+                buffers.emplace_back(std::move(offsets_buffer_span));
             }
 
             const auto null_count = std::visit(
@@ -245,7 +249,8 @@ namespace sparrow_ipc
                 node_index,
                 variadic_counts_idx,
                 true,
-                *child_field
+                *child_field,
+                dictionaries
             );
 
             const std::string_view format = sparrow::data_type_to_format(sparrow::detail::get_data_type_from_array<T>::get());
@@ -291,10 +296,11 @@ namespace sparrow_ipc
             size_t& buffer_index,
             size_t& node_index,
             size_t& variadic_counts_idx,
+            const dictionary_cache* dictionaries,
             const org::apache::arrow::flatbuf::Field& field)
         {
             return sparrow::array(deserialize_list_array<T>(
-                record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field
+                record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, dictionaries, field
             ));
         }
 
@@ -309,6 +315,7 @@ namespace sparrow_ipc
             size_t& buffer_index,
             size_t& node_index,
             size_t& variadic_counts_idx,
+            const dictionary_cache* dictionaries,
             const org::apache::arrow::flatbuf::Field& field)
         {
             ++node_index;  // Consume one FieldNode for this list view array
@@ -418,7 +425,8 @@ namespace sparrow_ipc
                 node_index,
                 variadic_counts_idx,
                 true,
-                *child_field
+                *child_field,
+                dictionaries
             );
             const std::string_view format = sparrow::data_type_to_format(sparrow::detail::get_data_type_from_array<T>::get());
 
@@ -463,10 +471,11 @@ namespace sparrow_ipc
             size_t& buffer_index,
             size_t& node_index,
             size_t& variadic_counts_idx,
+            const dictionary_cache* dictionaries,
             const org::apache::arrow::flatbuf::Field& field)
         {
             return sparrow::array(deserialize_list_view_array<T>(
-                record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, field
+                record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, dictionaries, field
             ));
         }
 
@@ -479,6 +488,7 @@ namespace sparrow_ipc
                                               size_t& buffer_index,
                                               size_t& node_index,
                                               size_t& variadic_counts_idx,
+                                              const dictionary_cache* dictionaries,
                                               const org::apache::arrow::flatbuf::Field& field);
 
         static sparrow::array deserialize_float(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -490,6 +500,7 @@ namespace sparrow_ipc
                                                 size_t& buffer_index,
                                                 size_t& node_index,
                                                 size_t& variadic_counts_idx,
+                                                const dictionary_cache* dictionaries,
                                                 const org::apache::arrow::flatbuf::Field& field);
 
         static sparrow::array deserialize_fixed_size_binary(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -501,6 +512,7 @@ namespace sparrow_ipc
                                                             size_t& buffer_index,
                                                             size_t& node_index,
                                                             size_t& variadic_counts_idx,
+                                                            const dictionary_cache* dictionaries,
                                                             const org::apache::arrow::flatbuf::Field& field);
 
         static sparrow::array deserialize_decimal(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -512,6 +524,7 @@ namespace sparrow_ipc
                                                   size_t& buffer_index,
                                                   size_t& node_index,
                                                   size_t& variadic_counts_idx,
+                                                  const dictionary_cache* dictionaries,
                                                   const org::apache::arrow::flatbuf::Field& field);
 
         static sparrow::array deserialize_null(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -523,6 +536,7 @@ namespace sparrow_ipc
                                                size_t& buffer_index,
                                                size_t& node_index,
                                                size_t& variadic_counts_idx,
+                                               const dictionary_cache* /*dictionaries*/,
                                                const org::apache::arrow::flatbuf::Field&);
 
         static sparrow::array deserialize_date(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -534,6 +548,7 @@ namespace sparrow_ipc
                                                size_t& buffer_index,
                                                size_t& node_index,
                                                size_t& variadic_counts_idx,
+                                               const dictionary_cache* /*dictionaries*/,
                                                const org::apache::arrow::flatbuf::Field& field);
 
         static sparrow::array deserialize_interval(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -545,6 +560,7 @@ namespace sparrow_ipc
                                                    size_t& buffer_index,
                                                    size_t& node_index,
                                                    size_t& variadic_counts_idx,
+                                                   const dictionary_cache* /*dictionaries*/,
                                                    const org::apache::arrow::flatbuf::Field& field);
 
         static sparrow::array deserialize_duration(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -556,6 +572,7 @@ namespace sparrow_ipc
                                                    size_t& buffer_index,
                                                    size_t& node_index,
                                                    size_t& variadic_counts_idx,
+                                                   const dictionary_cache* /*dictionaries*/,
                                                    const org::apache::arrow::flatbuf::Field& field);
 
         static sparrow::array deserialize_time(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -567,6 +584,7 @@ namespace sparrow_ipc
                                                size_t& buffer_index,
                                                size_t& node_index,
                                                size_t& variadic_counts_idx,
+                                               const dictionary_cache* /*dictionaries*/,
                                                const org::apache::arrow::flatbuf::Field& field);
 
         static sparrow::array deserialize_timestamp(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -578,6 +596,7 @@ namespace sparrow_ipc
                                                     size_t& buffer_index,
                                                     size_t& node_index,
                                                     size_t& variadic_counts_idx,
+                                                    const dictionary_cache* /*dictionaries*/,
                                                     const org::apache::arrow::flatbuf::Field& field);
 
         static sparrow::array deserialize_fixed_size_list(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -589,6 +608,7 @@ namespace sparrow_ipc
                                                           size_t& buffer_index,
                                                           size_t& node_index,
                                                           size_t& variadic_counts_idx,
+                                                          const dictionary_cache* dictionaries,
                                                           const org::apache::arrow::flatbuf::Field& field);
 
         static sparrow::array deserialize_struct(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -600,6 +620,7 @@ namespace sparrow_ipc
                                                  size_t& buffer_index,
                                                  size_t& node_index,
                                                  size_t& variadic_counts_idx,
+                                                 const dictionary_cache* dictionaries,
                                                  const org::apache::arrow::flatbuf::Field& field);
 
         static sparrow::array deserialize_map(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -611,6 +632,7 @@ namespace sparrow_ipc
                                               size_t& buffer_index,
                                               size_t& node_index,
                                               size_t& variadic_counts_idx,
+                                              const dictionary_cache* dictionaries,
                                               const org::apache::arrow::flatbuf::Field& field);
 
         static sparrow::array deserialize_run_end_encoded(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
@@ -622,6 +644,7 @@ namespace sparrow_ipc
                                                           size_t& buffer_index,
                                                           size_t& node_index,
                                                           size_t& variadic_counts_idx,
+                                                          const dictionary_cache* dictionaries,
                                                           const org::apache::arrow::flatbuf::Field& field);
     };
 }

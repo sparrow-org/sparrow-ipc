@@ -89,15 +89,13 @@ namespace sparrow_ipc
                     field
                 );
 
-                const dictionary_cache* cache = dictionaries != nullptr ? dictionaries
-                                                                        : m_active_dictionary_cache;
 
-                if (cache == nullptr)
+                if (dictionaries == nullptr)
                 {
                     return indices;
                 }
 
-                return apply_dictionary_encoding(std::move(indices), field, *cache);
+                return apply_dictionary_encoding(std::move(indices), field, *dictionaries);
             }
 
             initialize_deserializer_map();
@@ -120,28 +118,12 @@ namespace sparrow_ipc
                 buffer_index,
                 node_index,
                 variadic_counts_idx,
+                dictionaries,
                 field
             );
         };
 
-        if (dictionaries == nullptr)
-        {
-            return deserialize_impl();
-        }
-
-        const dictionary_cache* previous_active_dictionary_cache = m_active_dictionary_cache;
-        m_active_dictionary_cache = dictionaries;
-        try
-        {
-            auto result = deserialize_impl();
-            m_active_dictionary_cache = previous_active_dictionary_cache;
-            return result;
-        }
-        catch (...)
-        {
-            m_active_dictionary_cache = previous_active_dictionary_cache;
-            throw;
-        }
+        return deserialize_impl();
     }
 
     sparrow::array array_deserializer::deserialize_int(
@@ -154,6 +136,7 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& variadic_counts_idx,
+        const dictionary_cache* dictionaries,
         const org::apache::arrow::flatbuf::Field& field
     )
     {
@@ -176,6 +159,7 @@ namespace sparrow_ipc
                         buffer_index,
                         node_index,
                         variadic_counts_idx,
+                        dictionaries,
                         field
                     );
                 case sizeof(int16_t) * 8:
@@ -189,6 +173,7 @@ namespace sparrow_ipc
                         buffer_index,
                         node_index,
                         variadic_counts_idx,
+                        dictionaries,
                         field
                     );
                 case sizeof(int32_t) * 8:
@@ -202,6 +187,7 @@ namespace sparrow_ipc
                         buffer_index,
                         node_index,
                         variadic_counts_idx,
+                        dictionaries,
                         field
                     );
                 case sizeof(int64_t) * 8:
@@ -215,6 +201,7 @@ namespace sparrow_ipc
                         buffer_index,
                         node_index,
                         variadic_counts_idx,
+                        dictionaries,
                         field
                     );
                 default:
@@ -236,6 +223,7 @@ namespace sparrow_ipc
                         buffer_index,
                         node_index,
                         variadic_counts_idx,
+                        dictionaries,
                         field
                     );
                 case sizeof(uint16_t) * 8:
@@ -249,6 +237,7 @@ namespace sparrow_ipc
                         buffer_index,
                         node_index,
                         variadic_counts_idx,
+                        dictionaries,
                         field
                     );
                 case sizeof(uint32_t) * 8:
@@ -262,6 +251,7 @@ namespace sparrow_ipc
                         buffer_index,
                         node_index,
                         variadic_counts_idx,
+                        dictionaries,
                         field
                     );
                 case sizeof(uint64_t) * 8:
@@ -275,6 +265,7 @@ namespace sparrow_ipc
                         buffer_index,
                         node_index,
                         variadic_counts_idx,
+                        dictionaries,
                         field
                     );
                 default:
@@ -293,6 +284,7 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& variadic_counts_idx,
+        const dictionary_cache* dictionaries,
         const org::apache::arrow::flatbuf::Field& field
     )
     {
@@ -311,6 +303,7 @@ namespace sparrow_ipc
                     buffer_index,
                     node_index,
                     variadic_counts_idx,
+                    dictionaries,
                     field
                 );
             case org::apache::arrow::flatbuf::Precision::SINGLE:
@@ -324,6 +317,7 @@ namespace sparrow_ipc
                     buffer_index,
                     node_index,
                     variadic_counts_idx,
+                    dictionaries,
                     field
                 );
             case org::apache::arrow::flatbuf::Precision::DOUBLE:
@@ -337,6 +331,7 @@ namespace sparrow_ipc
                     buffer_index,
                     node_index,
                     variadic_counts_idx,
+                    dictionaries,
                     field
                 );
             default:
@@ -356,6 +351,7 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& /*variadic_counts_idx*/,
+        const dictionary_cache* /*dictionaries*/,
         const org::apache::arrow::flatbuf::Field& field
     )
     {
@@ -383,6 +379,7 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& /*variadic_counts_idx*/,
+        const dictionary_cache* /*dictionaries*/,
         const org::apache::arrow::flatbuf::Field& field
     )
     {
@@ -464,6 +461,7 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& /*variadic_counts_idx*/,
+        const dictionary_cache* /*dictionaries*/,
         const org::apache::arrow::flatbuf::Field&
     )
     {
@@ -483,6 +481,7 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& /*variadic_counts_idx*/,
+        const dictionary_cache* /*dictionaries*/,
         const org::apache::arrow::flatbuf::Field& field
     )
     {
@@ -523,6 +522,7 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& /*variadic_counts_idx*/,
+        const dictionary_cache* /*dictionaries*/,
         const org::apache::arrow::flatbuf::Field& field
     )
     {
@@ -577,6 +577,7 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& /*variadic_counts_idx*/,
+        const dictionary_cache* /*dictionaries*/,
         const org::apache::arrow::flatbuf::Field& field
     )
     {
@@ -643,6 +644,7 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& /*variadic_counts_idx*/,
+        const dictionary_cache* /*dictionaries*/,
         const org::apache::arrow::flatbuf::Field& field
     )
     {
@@ -714,6 +716,7 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& /*variadic_counts_idx*/,
+        const dictionary_cache* /*dictionaries*/,
         const org::apache::arrow::flatbuf::Field& field
     )
     {
@@ -859,6 +862,7 @@ namespace sparrow_ipc
             size_t& buffer_index,
             size_t& node_index,
             size_t& variadic_counts_idx,
+            const dictionary_cache* dictionaries,
             const org::apache::arrow::flatbuf::Field& field
         )
         {
@@ -912,7 +916,8 @@ namespace sparrow_ipc
                 node_index,
                 variadic_counts_idx,
                 true,
-                *child_field
+                *child_field,
+                dictionaries
             );
 
             const std::string format = "+w:" + std::to_string(list_size);
@@ -960,6 +965,7 @@ namespace sparrow_ipc
             size_t& buffer_index,
             size_t& node_index,
             size_t& variadic_counts_idx,
+            const dictionary_cache* dictionaries,
             const org::apache::arrow::flatbuf::Field& field
         )
         {
@@ -1011,7 +1017,8 @@ namespace sparrow_ipc
                         node_index,
                         variadic_counts_idx,
                         true,
-                        *child_field
+                        *child_field,
+                        dictionaries
                     )
                 );
             }
@@ -1077,6 +1084,7 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& variadic_counts_idx,
+        const dictionary_cache* dictionaries,
         const org::apache::arrow::flatbuf::Field& field
     )
     {
@@ -1090,6 +1098,7 @@ namespace sparrow_ipc
             buffer_index,
             node_index,
             variadic_counts_idx,
+            dictionaries,
             field
         ));
     }
@@ -1104,6 +1113,7 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& variadic_counts_idx,
+        const dictionary_cache* dictionaries,
         const org::apache::arrow::flatbuf::Field& field
     )
     {
@@ -1117,6 +1127,7 @@ namespace sparrow_ipc
             buffer_index,
             node_index,
             variadic_counts_idx,
+            dictionaries,
             field
         ));
     }
@@ -1131,6 +1142,7 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& variadic_counts_idx,
+        const dictionary_cache* dictionaries,
         const org::apache::arrow::flatbuf::Field& field
     )
     {
@@ -1146,6 +1158,7 @@ namespace sparrow_ipc
                 buffer_index,
                 node_index,
                 variadic_counts_idx,
+                dictionaries,
                 field
             )
         );
@@ -1161,6 +1174,7 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& variadic_counts_idx,
+        const dictionary_cache* dictionaries,
         const org::apache::arrow::flatbuf::Field& field
     )
     {
@@ -1174,7 +1188,8 @@ namespace sparrow_ipc
             buffer_index,
             node_index,
             variadic_counts_idx,
-            field
+            field,
+            dictionaries
         ));
     }
 }

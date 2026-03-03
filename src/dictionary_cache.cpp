@@ -23,7 +23,6 @@ namespace sparrow_ipc
             const auto lhs_proxy = sparrow::detail::array_access::get_arrow_proxy(lhs);
             const auto rhs_proxy = sparrow::detail::array_access::get_arrow_proxy(rhs);
 
-            
             const auto lhs_typed = sparrow::primitive_array<T>(lhs_proxy);
             const auto rhs_typed = sparrow::primitive_array<T>(rhs_proxy);
 

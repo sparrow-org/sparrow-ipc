@@ -331,7 +331,7 @@ namespace sparrow_ipc
         return dictionaries;
     }
 
-    void dictionary_tracker::mark_emitted(int64_t id)
+    void dictionary_tracker::mark_emitted(int64_t id) noexcept
     {
         m_emitted_dict_ids.insert(id);
         if (const auto pending_it = m_pending_dict_fingerprints.find(id);
@@ -342,12 +342,12 @@ namespace sparrow_ipc
         }
     }
 
-    bool dictionary_tracker::is_emitted(int64_t id) const
+    bool dictionary_tracker::is_emitted(int64_t id) const noexcept
     {
         return m_emitted_dict_ids.contains(id);
     }
 
-    void dictionary_tracker::reset()
+    void dictionary_tracker::reset() noexcept
     {
         m_emitted_dict_ids.clear();
         m_emitted_dict_fingerprints.clear();

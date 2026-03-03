@@ -20,6 +20,7 @@ class array_deserializer;
 
 namespace sparrow_ipc
 {
+    class dictionary_cache;
     /**
      * @brief Deserialize a run-end encoded array from IPC format.
      *
@@ -55,7 +56,8 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& variadic_counts_idx,
-        const org::apache::arrow::flatbuf::Field& field
+        const org::apache::arrow::flatbuf::Field& field,
+        const dictionary_cache* dictionaries = nullptr
     )
     {
         ++node_index;  // Consume one FieldNode for this run-end encoded array (parent)
@@ -114,7 +116,8 @@ namespace sparrow_ipc
             node_index,
             variadic_counts_idx,
             true,
-            *run_ends_field
+            *run_ends_field,
+            dictionaries
         );
 
         // Deserialize the second child: encoded values
@@ -141,7 +144,8 @@ namespace sparrow_ipc
             node_index,
             variadic_counts_idx,
             true,
-            *values_field
+            *values_field,
+            dictionaries
         );
 
         auto [run_ends_arrow_array, run_ends_arrow_schema] = sparrow::extract_arrow_structures(std::move(run_ends_array));
