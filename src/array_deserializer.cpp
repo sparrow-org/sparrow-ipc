@@ -335,7 +335,7 @@ namespace sparrow_ipc
 
             field_descriptor child_descriptor(
                 child_length,
-                child_field->name() ? child_field->name()->str() : "",
+                utils::get_fb_name(child_field),
                 std::move(child_metadata),
                 utils::get_sparrow_flags(*child_field),
                 true,
@@ -429,7 +429,7 @@ namespace sparrow_ipc
 
                 field_descriptor child_descriptor(
                     field_desc.length,
-                    child_field->name() ? child_field->name()->str() : "",
+                    utils::get_fb_name(child_field),
                     std::move(child_metadata),
                     utils::get_sparrow_flags(*child_field),
                     true,

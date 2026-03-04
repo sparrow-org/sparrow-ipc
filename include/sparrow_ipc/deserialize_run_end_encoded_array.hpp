@@ -88,7 +88,7 @@ namespace sparrow_ipc
 
         field_descriptor run_ends_desc(
             encoded_length,
-            run_ends_field->name()->str(),
+            utils::get_fb_name(run_ends_field),
             std::move(run_ends_metadata),
             utils::get_sparrow_flags(*run_ends_field),
             true,
@@ -124,7 +124,7 @@ namespace sparrow_ipc
 
         field_descriptor values_desc(
             encoded_length,  // Same encoded length as run ends
-            values_field->name()->str(),
+            utils::get_fb_name(values_field),
             std::move(values_metadata),
             utils::get_sparrow_flags(*values_field),
             true,

@@ -177,11 +177,10 @@ namespace sparrow_ipc
             {
                 throw std::runtime_error("Invalid null field.");
             }
-            const std::string name = field->name() == nullptr ? "" : field->name()->str();
 
             field_descriptor field_desc(
                 record_batch.length(),
-                std::move(name),
+                utils::get_fb_name(field),
                 field_metadata[field_idx++],
                 utils::get_sparrow_flags(*field),
                 true,
@@ -237,16 +236,9 @@ namespace sparrow_ipc
                     }
                     for (const auto field : *(schema->fields()))
                     {
-                        if (field != nullptr && field->name() != nullptr)
-                        {
-                            field_names.emplace_back(field->name()->str());
-                        }
-                        else
-                        {
-                            field_names.emplace_back("_unnamed_");
-                        }
+                        field_names.emplace_back(utils::get_fb_name(field, "_unnamed_"));
                         const ::flatbuffers::Vector<::flatbuffers::Offset<org::apache::arrow::flatbuf::KeyValue>>*
-                            fb_custom_metadata = field->custom_metadata();
+                            fb_custom_metadata = field ? field->custom_metadata() : nullptr;
                         std::optional<std::vector<sparrow::metadata_pair>>
                             metadata = fb_custom_metadata == nullptr
                                            ? std::nullopt

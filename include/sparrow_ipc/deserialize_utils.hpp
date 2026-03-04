@@ -81,4 +81,24 @@ namespace sparrow_ipc::utils
      */
     [[nodiscard]] std::optional<std::unordered_set<sparrow::ArrowFlag>>
     get_sparrow_flags(const org::apache::arrow::flatbuf::Field& field);
+
+    /**
+     * @brief Safely extracts a string from a FlatBuffers object that has a name() method.
+     *
+     * @tparam T The type of the FlatBuffers object (e.g., org::apache::arrow::flatbuf::Field)
+     * @param obj Pointer to the FlatBuffers object (can be null)
+     * @param default_val Value to return if obj or name() is null
+     * @return std::string The extracted name or the default value
+     */
+    template <typename T>
+    inline std::string get_fb_name(const T* obj, const std::string& default_val = "")
+    {
+        if (!obj)
+        {
+            return default_val;
+        }
+
+        auto name = obj->name();
+        return name ? name->str() : default_val;
+    }
 }
