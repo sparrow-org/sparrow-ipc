@@ -13,7 +13,6 @@
 #include <sparrow/types/data_type.hpp>
 
 #include "Message_generated.h"
-
 #include "sparrow_ipc/arrow_interface/arrow_array.hpp"
 #include "sparrow_ipc/arrow_interface/arrow_schema.hpp"
 #include "sparrow_ipc/deserialize_primitive_array.hpp"
@@ -35,6 +34,7 @@ namespace sparrow_ipc
     class array_deserializer
     {
     public:
+
         /**
          * @brief A function pointer type for the deserializer function.
          *
@@ -51,8 +51,8 @@ namespace sparrow_ipc
             size_t&,
             size_t&,
             size_t&,
-            const dictionary_cache*,
-            const org::apache::arrow::flatbuf::Field&
+            const org::apache::arrow::flatbuf::Field&,
+            const dictionary_cache*
         )>;
 
         /**
@@ -68,27 +68,33 @@ namespace sparrow_ipc
          * @param metadata The metadata associated with the field.
          * @param nullable Whether the field is nullable.
          * @param buffer_index The current index into the buffer list of the RecordBatch.
-         * @param node_index This index tracks the FieldNode being processed in the RecordBatch's depth-first traversal. It is advanced for each FieldNode consumed.
-         * @param variadic_counts_idx The current index into the list of variadic buffers (used with view data types).
-         * @param decode_dictionary_indices Whether dictionary-annotated fields should be read from their physical
-         *        index buffers (true) or interpreted as logical dictionary values (false).
+         * @param node_index This index tracks the FieldNode being processed in the RecordBatch's depth-first
+         * traversal. It is advanced for each FieldNode consumed.
+         * @param variadic_counts_idx The current index into the list of variadic buffers (used with view data
+         * types).
+         * @param decode_dictionary_indices Whether dictionary-annotated fields should be read from their
+         * physical index buffers (true) or interpreted as logical dictionary values (false).
          * @param field The Flatbuffer Field object describing the array to deserialize.
          * @return A `sparrow::array` containing the deserialized data.
          * @throws std::runtime_error if the field type is not supported.
          */
-        static sparrow::array deserialize(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                   const std::span<const uint8_t>& body,
-                                   const int64_t length,
-                                   const std::string& name,
-                                   const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                   bool nullable,
-                                   size_t& buffer_index,
-                                   size_t& node_index,
-                                   size_t& variadic_counts_idx,
-                                   bool decode_dictionary_indices,
-                                   const org::apache::arrow::flatbuf::Field& field,
-                                   const dictionary_cache* dictionaries = nullptr);
+        static sparrow::array deserialize(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            bool decode_dictionary_indices,
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* dictionaries = nullptr
+        );
+
     private:
+
         inline static std::unordered_map<org::apache::arrow::flatbuf::Type, deserializer_func> m_deserializer_map;
 
         /**
@@ -97,56 +103,62 @@ namespace sparrow_ipc
          */
         static void initialize_deserializer_map();
 
-        template<typename T>
-        static sparrow::array deserialize_primitive(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                    const std::span<const uint8_t>& body,
-                                                    const int64_t length,
-                                                    const std::string& name,
-                                                    const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                    bool nullable,
-                                                    size_t& buffer_index,
-                                                    size_t& node_index,
-                                                    size_t& /*variadic_counts_idx*/,
-                                                    const dictionary_cache* /*dictionaries*/,
-                                                    const org::apache::arrow::flatbuf::Field&)
+        template <typename T>
+        static sparrow::array deserialize_primitive(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& /*variadic_counts_idx*/,
+            const org::apache::arrow::flatbuf::Field&,
+            const dictionary_cache* /*dictionaries*/
+        )
         {
             ++node_index;  // Consume one FieldNode for this primitive array
-            return sparrow::array(deserialize_primitive_array<T>(
-                record_batch, body, length, name, metadata, nullable, buffer_index
-            ));
+            return sparrow::array(
+                deserialize_primitive_array<T>(record_batch, body, length, name, metadata, nullable, buffer_index)
+            );
         }
 
-        template<typename T>
-        static sparrow::array deserialize_variable_size_binary(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                               const std::span<const uint8_t>& body,
-                                                               const int64_t length,
-                                                               const std::string& name,
-                                                               const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                               bool nullable,
-                                                               size_t& buffer_index,
-                                                               size_t& node_index,
-                                                               size_t& /*variadic_counts_idx*/,
-                                                               const dictionary_cache* /*dictionaries*/,
-                                                               const org::apache::arrow::flatbuf::Field&)
+        template <typename T>
+        static sparrow::array deserialize_variable_size_binary(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& /*variadic_counts_idx*/,
+            const org::apache::arrow::flatbuf::Field&,
+            const dictionary_cache* /*dictionaries*/
+        )
         {
             ++node_index;  // Consume one FieldNode for this binary array
-            return sparrow::array(deserialize_variable_size_binary_array<T>(
-                record_batch, body, length, name, metadata, nullable, buffer_index
-            ));
+            return sparrow::array(
+                deserialize_variable_size_binary_array<T>(record_batch, body, length, name, metadata, nullable, buffer_index)
+            );
         }
 
-        template<typename T>
-        static sparrow::array deserialize_variable_size_binary_view(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                               const std::span<const uint8_t>& body,
-                                                               const int64_t length,
-                                                               const std::string& name,
-                                                               const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                               bool nullable,
-                                                               size_t& buffer_index,
-                                                               size_t& node_index,
-                                                               size_t& variadic_counts_idx,
-                                                               const dictionary_cache* /*dictionaries*/,
-                                                               const org::apache::arrow::flatbuf::Field&)
+        template <typename T>
+        static sparrow::array deserialize_variable_size_binary_view(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field&,
+            const dictionary_cache* /*dictionaries*/
+        )
         {
             ++node_index;  // Consume one FieldNode for this binary view array
             const auto* variadic_counts = record_batch.variadicBufferCounts();
@@ -155,9 +167,10 @@ namespace sparrow_ipc
             {
                 data_buffers_size = variadic_counts->Get(variadic_counts_idx++);
             }
-            return sparrow::array(deserialize_variable_size_binary_view_array<T>(
-                record_batch, body, length, name, metadata, nullable, buffer_index, data_buffers_size
-            ));
+            return sparrow::array(
+                deserialize_variable_size_binary_view_array<
+                    T>(record_batch, body, length, name, metadata, nullable, buffer_index, data_buffers_size)
+            );
         }
 
         // TODO refactor the 'list' related fcts when testing with recursive is handled
@@ -172,8 +185,9 @@ namespace sparrow_ipc
             size_t& buffer_index,
             size_t& node_index,
             size_t& variadic_counts_idx,
-            const dictionary_cache* dictionaries,
-            const org::apache::arrow::flatbuf::Field& field)
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* dictionaries
+        )
         {
             ++node_index;  // Consume one FieldNode for this list array
             // Set up flags based on nullable
@@ -198,27 +212,29 @@ namespace sparrow_ipc
             {
                 auto processed_offsets = utils::get_decompressed_buffer(offsets_buffer_span, compression);
                 child_length = std::visit(
-                    [length](const auto& arg) -> int64_t {
+                    [length](const auto& arg) -> int64_t
+                    {
                         const auto* offsets_ptr = reinterpret_cast<const offset_type*>(arg.data());
                         return offsets_ptr[length];
                     },
                     processed_offsets
                 );
 
-                buffers.emplace_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
-                buffers.emplace_back(std::move(processed_offsets));
+                buffers.push_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
+                buffers.push_back(std::move(processed_offsets));
             }
             else
             {
                 const auto offsets = reinterpret_cast<const offset_type*>(offsets_buffer_span.data());
                 child_length = offsets[length];
 
-                buffers.emplace_back(std::move(validity_buffer_span));
-                buffers.emplace_back(std::move(offsets_buffer_span));
+                buffers.push_back(std::move(validity_buffer_span));
+                buffers.push_back(std::move(offsets_buffer_span));
             }
 
             const auto null_count = std::visit(
-                [length](const auto& arg) {
+                [length](const auto& arg)
+                {
                     std::span<const uint8_t> span(arg.data(), arg.size());
                     return utils::get_bitmap_pointer_and_null_count(span, length).second;
                 },
@@ -253,9 +269,13 @@ namespace sparrow_ipc
                 dictionaries
             );
 
-            const std::string_view format = sparrow::data_type_to_format(sparrow::detail::get_data_type_from_array<T>::get());
+            const std::string_view format = sparrow::data_type_to_format(
+                sparrow::detail::get_data_type_from_array<T>::get()
+            );
 
-            auto [child_arrow_array, child_arrow_schema] = sparrow::extract_arrow_structures(std::move(child_array));
+            auto [child_arrow_array, child_arrow_schema] = sparrow::extract_arrow_structures(
+                std::move(child_array)
+            );
 
             auto** schema_children = new ArrowSchema*[1];
             schema_children[0] = new ArrowSchema(std::move(child_arrow_schema));
@@ -264,7 +284,7 @@ namespace sparrow_ipc
                 name,
                 metadata,
                 flags,
-                1, // one child
+                1,  // one child
                 schema_children,
                 nullptr
             );
@@ -285,7 +305,7 @@ namespace sparrow_ipc
             return T{std::move(ap)};
         }
 
-        template<typename T>
+        template <typename T>
         static sparrow::array deserialize_list(
             const org::apache::arrow::flatbuf::RecordBatch& record_batch,
             const std::span<const uint8_t>& body,
@@ -296,12 +316,25 @@ namespace sparrow_ipc
             size_t& buffer_index,
             size_t& node_index,
             size_t& variadic_counts_idx,
-            const dictionary_cache* dictionaries,
-            const org::apache::arrow::flatbuf::Field& field)
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* dictionaries
+        )
         {
-            return sparrow::array(deserialize_list_array<T>(
-                record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, dictionaries, field
-            ));
+            return sparrow::array(
+                deserialize_list_array<T>(
+                    record_batch,
+                    body,
+                    length,
+                    name,
+                    metadata,
+                    nullable,
+                    buffer_index,
+                    node_index,
+                    variadic_counts_idx,
+                    field,
+                    dictionaries
+                )
+            );
         }
 
         template <typename T>
@@ -315,8 +348,9 @@ namespace sparrow_ipc
             size_t& buffer_index,
             size_t& node_index,
             size_t& variadic_counts_idx,
-            const dictionary_cache* dictionaries,
-            const org::apache::arrow::flatbuf::Field& field)
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* dictionaries
+        )
         {
             ++node_index;  // Consume one FieldNode for this list view array
             // Set up flags based on nullable
@@ -326,7 +360,8 @@ namespace sparrow_ipc
                 flags = {sparrow::ArrowFlag::NULLABLE};
             }
 
-            const int64_t child_length = [&] {
+            const int64_t child_length = [&]
+            {
                 if (!record_batch.nodes() || node_index >= record_batch.nodes()->size())
                 {
                     throw std::runtime_error(
@@ -339,33 +374,42 @@ namespace sparrow_ipc
 
             const auto compression = record_batch.compression();
 
-            auto process_buffer = [&](auto&& buffer_span) {
-                return compression
-                    ? utils::get_decompressed_buffer(buffer_span, compression)
-                    : std::move(buffer_span);
+            auto process_buffer = [&](auto&& buffer_span)
+            {
+                return compression ? utils::get_decompressed_buffer(buffer_span, compression)
+                                   : std::move(buffer_span);
             };
 
             // Process buffers
             auto processed_validity = process_buffer(utils::get_buffer(record_batch, body, buffer_index));
-            auto processed_offsets  = process_buffer(utils::get_buffer(record_batch, body, buffer_index));
-            auto processed_sizes    = process_buffer(utils::get_buffer(record_batch, body, buffer_index));
+            auto processed_offsets = process_buffer(utils::get_buffer(record_batch, body, buffer_index));
+            auto processed_sizes = process_buffer(utils::get_buffer(record_batch, body, buffer_index));
 
             {
                 using offset_type = typename T::offset_type;
                 using size_type = typename T::list_size_type;
 
-                auto get_buffer_data_ptr = [](const arrow_array_private_data::optionally_owned_buffer& buf) {
-                    return std::visit([](const auto& arg) { return arg.data(); }, buf);
+                auto get_buffer_data_ptr = [](const arrow_array_private_data::optionally_owned_buffer& buf)
+                {
+                    return std::visit(
+                        [](const auto& arg)
+                        {
+                            return arg.data();
+                        },
+                        buf
+                    );
                 };
 
-                const auto* offsets_ptr = reinterpret_cast<const offset_type*>(get_buffer_data_ptr(processed_offsets));
+                const auto* offsets_ptr = reinterpret_cast<const offset_type*>(
+                    get_buffer_data_ptr(processed_offsets)
+                );
                 const auto* sizes_ptr = reinterpret_cast<const size_type*>(get_buffer_data_ptr(processed_sizes));
 
                 // Validate offsets + sizes
                 for (int64_t i = 0; i < length; ++i)
                 {
                     const int64_t offset = static_cast<int64_t>(offsets_ptr[i]);
-                    const int64_t size   = static_cast<int64_t>(sizes_ptr[i]);
+                    const int64_t size = static_cast<int64_t>(sizes_ptr[i]);
 
                     if (offset < 0)
                     {
@@ -379,9 +423,7 @@ namespace sparrow_ipc
 
                     if (offset > child_length || size > child_length - offset)
                     {
-                        throw std::runtime_error(
-                            "Offset + size exceeds child length derived from metadata."
-                        );
+                        throw std::runtime_error("Offset + size exceeds child length derived from metadata.");
                     }
                 }
             }
@@ -396,7 +438,8 @@ namespace sparrow_ipc
             buffers.push_back(std::move(processed_sizes));
 
             const auto null_count = std::visit(
-                [length](const auto& arg) {
+                [length](const auto& arg)
+                {
                     return utils::get_bitmap_pointer_and_null_count({arg.data(), arg.size()}, length).second;
                 },
                 buffers[0]
@@ -428,9 +471,13 @@ namespace sparrow_ipc
                 *child_field,
                 dictionaries
             );
-            const std::string_view format = sparrow::data_type_to_format(sparrow::detail::get_data_type_from_array<T>::get());
+            const std::string_view format = sparrow::data_type_to_format(
+                sparrow::detail::get_data_type_from_array<T>::get()
+            );
 
-            auto [child_arrow_array, child_arrow_schema] = sparrow::extract_arrow_structures(std::move(child_array));
+            auto [child_arrow_array, child_arrow_schema] = sparrow::extract_arrow_structures(
+                std::move(child_array)
+            );
 
             auto** schema_children = new ArrowSchema*[1];
             schema_children[0] = new ArrowSchema(std::move(child_arrow_schema));
@@ -439,7 +486,7 @@ namespace sparrow_ipc
                 name,
                 metadata,
                 flags,
-                1, // one child
+                1,  // one child
                 schema_children,
                 nullptr
             );
@@ -460,7 +507,7 @@ namespace sparrow_ipc
             return T{std::move(ap)};
         }
 
-        template<typename T>
+        template <typename T>
         static sparrow::array deserialize_list_view(
             const org::apache::arrow::flatbuf::RecordBatch& record_batch,
             const std::span<const uint8_t>& body,
@@ -471,180 +518,221 @@ namespace sparrow_ipc
             size_t& buffer_index,
             size_t& node_index,
             size_t& variadic_counts_idx,
-            const dictionary_cache* dictionaries,
-            const org::apache::arrow::flatbuf::Field& field)
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* dictionaries
+        )
         {
-            return sparrow::array(deserialize_list_view_array<T>(
-                record_batch, body, length, name, metadata, nullable, buffer_index, node_index, variadic_counts_idx, dictionaries, field
-            ));
+            return sparrow::array(
+                deserialize_list_view_array<T>(
+                    record_batch,
+                    body,
+                    length,
+                    name,
+                    metadata,
+                    nullable,
+                    buffer_index,
+                    node_index,
+                    variadic_counts_idx,
+                    field,
+                    dictionaries
+                )
+            );
         }
 
-        static sparrow::array deserialize_int(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                              const std::span<const uint8_t>& body,
-                                              const int64_t length,
-                                              const std::string& name,
-                                              const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                              bool nullable,
-                                              size_t& buffer_index,
-                                              size_t& node_index,
-                                              size_t& variadic_counts_idx,
-                                              const dictionary_cache* dictionaries,
-                                              const org::apache::arrow::flatbuf::Field& field);
+        static sparrow::array deserialize_int(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* dictionaries
+        );
 
-        static sparrow::array deserialize_float(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                const std::span<const uint8_t>& body,
-                                                const int64_t length,
-                                                const std::string& name,
-                                                const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                bool nullable,
-                                                size_t& buffer_index,
-                                                size_t& node_index,
-                                                size_t& variadic_counts_idx,
-                                                const dictionary_cache* dictionaries,
-                                                const org::apache::arrow::flatbuf::Field& field);
+        static sparrow::array deserialize_float(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* dictionaries
+        );
 
-        static sparrow::array deserialize_fixed_size_binary(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                            const std::span<const uint8_t>& body,
-                                                            const int64_t length,
-                                                            const std::string& name,
-                                                            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                            bool nullable,
-                                                            size_t& buffer_index,
-                                                            size_t& node_index,
-                                                            size_t& variadic_counts_idx,
-                                                            const dictionary_cache* dictionaries,
-                                                            const org::apache::arrow::flatbuf::Field& field);
+        static sparrow::array deserialize_fixed_size_binary(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* dictionaries
+        );
 
-        static sparrow::array deserialize_decimal(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                  const std::span<const uint8_t>& body,
-                                                  const int64_t length,
-                                                  const std::string& name,
-                                                  const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                  bool nullable,
-                                                  size_t& buffer_index,
-                                                  size_t& node_index,
-                                                  size_t& variadic_counts_idx,
-                                                  const dictionary_cache* dictionaries,
-                                                  const org::apache::arrow::flatbuf::Field& field);
+        static sparrow::array deserialize_decimal(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* dictionaries
+        );
 
-        static sparrow::array deserialize_null(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                               const std::span<const uint8_t>& body,
-                                               const int64_t length,
-                                               const std::string& name,
-                                               const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                               bool nullable,
-                                               size_t& buffer_index,
-                                               size_t& node_index,
-                                               size_t& variadic_counts_idx,
-                                               const dictionary_cache* /*dictionaries*/,
-                                               const org::apache::arrow::flatbuf::Field&);
+        static sparrow::array deserialize_null(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field&,
+            const dictionary_cache* /*dictionaries*/
+        );
 
-        static sparrow::array deserialize_date(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                               const std::span<const uint8_t>& body,
-                                               const int64_t length,
-                                               const std::string& name,
-                                               const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                               bool nullable,
-                                               size_t& buffer_index,
-                                               size_t& node_index,
-                                               size_t& variadic_counts_idx,
-                                               const dictionary_cache* /*dictionaries*/,
-                                               const org::apache::arrow::flatbuf::Field& field);
+        static sparrow::array deserialize_date(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* /*dictionaries*/
+        );
 
-        static sparrow::array deserialize_interval(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                   const std::span<const uint8_t>& body,
-                                                   const int64_t length,
-                                                   const std::string& name,
-                                                   const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                   bool nullable,
-                                                   size_t& buffer_index,
-                                                   size_t& node_index,
-                                                   size_t& variadic_counts_idx,
-                                                   const dictionary_cache* /*dictionaries*/,
-                                                   const org::apache::arrow::flatbuf::Field& field);
+        static sparrow::array deserialize_interval(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* /*dictionaries*/
+        );
 
-        static sparrow::array deserialize_duration(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                   const std::span<const uint8_t>& body,
-                                                   const int64_t length,
-                                                   const std::string& name,
-                                                   const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                   bool nullable,
-                                                   size_t& buffer_index,
-                                                   size_t& node_index,
-                                                   size_t& variadic_counts_idx,
-                                                   const dictionary_cache* /*dictionaries*/,
-                                                   const org::apache::arrow::flatbuf::Field& field);
+        static sparrow::array deserialize_duration(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* /*dictionaries*/
+        );
 
-        static sparrow::array deserialize_time(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                               const std::span<const uint8_t>& body,
-                                               const int64_t length,
-                                               const std::string& name,
-                                               const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                               bool nullable,
-                                               size_t& buffer_index,
-                                               size_t& node_index,
-                                               size_t& variadic_counts_idx,
-                                               const dictionary_cache* /*dictionaries*/,
-                                               const org::apache::arrow::flatbuf::Field& field);
+        static sparrow::array deserialize_time(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* /*dictionaries*/
+        );
 
-        static sparrow::array deserialize_timestamp(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                    const std::span<const uint8_t>& body,
-                                                    const int64_t length,
-                                                    const std::string& name,
-                                                    const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                    bool nullable,
-                                                    size_t& buffer_index,
-                                                    size_t& node_index,
-                                                    size_t& variadic_counts_idx,
-                                                    const dictionary_cache* /*dictionaries*/,
-                                                    const org::apache::arrow::flatbuf::Field& field);
+        static sparrow::array deserialize_timestamp(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* /*dictionaries*/
+        );
 
-        static sparrow::array deserialize_fixed_size_list(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                          const std::span<const uint8_t>& body,
-                                                          const int64_t length,
-                                                          const std::string& name,
-                                                          const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                          bool nullable,
-                                                          size_t& buffer_index,
-                                                          size_t& node_index,
-                                                          size_t& variadic_counts_idx,
-                                                          const dictionary_cache* dictionaries,
-                                                          const org::apache::arrow::flatbuf::Field& field);
+        static sparrow::array deserialize_fixed_size_list(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* dictionaries
+        );
 
-        static sparrow::array deserialize_struct(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                 const std::span<const uint8_t>& body,
-                                                 const int64_t length,
-                                                 const std::string& name,
-                                                 const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                 bool nullable,
-                                                 size_t& buffer_index,
-                                                 size_t& node_index,
-                                                 size_t& variadic_counts_idx,
-                                                 const dictionary_cache* dictionaries,
-                                                 const org::apache::arrow::flatbuf::Field& field);
+        static sparrow::array deserialize_struct(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* dictionaries
+        );
 
-        static sparrow::array deserialize_map(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                              const std::span<const uint8_t>& body,
-                                              const int64_t length,
-                                              const std::string& name,
-                                              const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                              bool nullable,
-                                              size_t& buffer_index,
-                                              size_t& node_index,
-                                              size_t& variadic_counts_idx,
-                                              const dictionary_cache* dictionaries,
-                                              const org::apache::arrow::flatbuf::Field& field);
+        static sparrow::array deserialize_map(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* dictionaries
+        );
 
-        static sparrow::array deserialize_run_end_encoded(const org::apache::arrow::flatbuf::RecordBatch& record_batch,
-                                                          const std::span<const uint8_t>& body,
-                                                          const int64_t length,
-                                                          const std::string& name,
-                                                          const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
-                                                          bool nullable,
-                                                          size_t& buffer_index,
-                                                          size_t& node_index,
-                                                          size_t& variadic_counts_idx,
-                                                          const dictionary_cache* dictionaries,
-                                                          const org::apache::arrow::flatbuf::Field& field);
+        static sparrow::array deserialize_run_end_encoded(
+            const org::apache::arrow::flatbuf::RecordBatch& record_batch,
+            const std::span<const uint8_t>& body,
+            const int64_t length,
+            const std::string& name,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata,
+            bool nullable,
+            size_t& buffer_index,
+            size_t& node_index,
+            size_t& variadic_counts_idx,
+            const org::apache::arrow::flatbuf::Field& field,
+            const dictionary_cache* dictionaries
+        );
     };
 }

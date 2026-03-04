@@ -6,6 +6,7 @@
 #include <sparrow/map_array.hpp>
 
 #include "array_deserialization_dictionaries.hpp"
+#include "bit_width.hpp"
 #include "sparrow_ipc/deserialize_decimal_array.hpp"
 #include "sparrow_ipc/deserialize_duration_array.hpp"
 #include "sparrow_ipc/deserialize_fixed_size_binary_array.hpp"
@@ -118,8 +119,8 @@ namespace sparrow_ipc
                 buffer_index,
                 node_index,
                 variadic_counts_idx,
-                dictionaries,
-                field
+                field,
+                dictionaries
             );
         };
 
@@ -136,8 +137,8 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& variadic_counts_idx,
-        const dictionary_cache* dictionaries,
-        const org::apache::arrow::flatbuf::Field& field
+        const org::apache::arrow::flatbuf::Field& field,
+        const dictionary_cache* dictionaries
     )
     {
         const auto* int_type = field.type_as_Int();
@@ -148,7 +149,7 @@ namespace sparrow_ipc
         {
             switch (bit_width)
             {
-                case sizeof(int8_t) * 8:
+                case BIT_WIDTH_8:
                     return deserialize_primitive<int8_t>(
                         record_batch,
                         body,
@@ -159,10 +160,10 @@ namespace sparrow_ipc
                         buffer_index,
                         node_index,
                         variadic_counts_idx,
-                        dictionaries,
-                        field
+                        field,
+                        dictionaries
                     );
-                case sizeof(int16_t) * 8:
+                case BIT_WIDTH_16:
                     return deserialize_primitive<int16_t>(
                         record_batch,
                         body,
@@ -173,10 +174,10 @@ namespace sparrow_ipc
                         buffer_index,
                         node_index,
                         variadic_counts_idx,
-                        dictionaries,
-                        field
+                        field,
+                        dictionaries
                     );
-                case sizeof(int32_t) * 8:
+                case BIT_WIDTH_32:
                     return deserialize_primitive<int32_t>(
                         record_batch,
                         body,
@@ -187,10 +188,10 @@ namespace sparrow_ipc
                         buffer_index,
                         node_index,
                         variadic_counts_idx,
-                        dictionaries,
-                        field
+                        field,
+                        dictionaries
                     );
-                case sizeof(int64_t) * 8:
+                case BIT_WIDTH_64:
                     return deserialize_primitive<int64_t>(
                         record_batch,
                         body,
@@ -201,8 +202,8 @@ namespace sparrow_ipc
                         buffer_index,
                         node_index,
                         variadic_counts_idx,
-                        dictionaries,
-                        field
+                        field,
+                        dictionaries
                     );
                 default:
                     throw std::runtime_error("Unsupported integer bit width: " + std::to_string(bit_width));
@@ -212,7 +213,7 @@ namespace sparrow_ipc
         {
             switch (bit_width)
             {
-                case sizeof(uint8_t) * 8:
+                case BIT_WIDTH_8:
                     return deserialize_primitive<uint8_t>(
                         record_batch,
                         body,
@@ -223,10 +224,10 @@ namespace sparrow_ipc
                         buffer_index,
                         node_index,
                         variadic_counts_idx,
-                        dictionaries,
-                        field
+                        field,
+                        dictionaries
                     );
-                case sizeof(uint16_t) * 8:
+                case BIT_WIDTH_16:
                     return deserialize_primitive<uint16_t>(
                         record_batch,
                         body,
@@ -237,10 +238,10 @@ namespace sparrow_ipc
                         buffer_index,
                         node_index,
                         variadic_counts_idx,
-                        dictionaries,
-                        field
+                        field,
+                        dictionaries
                     );
-                case sizeof(uint32_t) * 8:
+                case BIT_WIDTH_32:
                     return deserialize_primitive<uint32_t>(
                         record_batch,
                         body,
@@ -251,10 +252,10 @@ namespace sparrow_ipc
                         buffer_index,
                         node_index,
                         variadic_counts_idx,
-                        dictionaries,
-                        field
+                        field,
+                        dictionaries
                     );
-                case sizeof(uint64_t) * 8:
+                case BIT_WIDTH_64:
                     return deserialize_primitive<uint64_t>(
                         record_batch,
                         body,
@@ -265,8 +266,8 @@ namespace sparrow_ipc
                         buffer_index,
                         node_index,
                         variadic_counts_idx,
-                        dictionaries,
-                        field
+                        field,
+                        dictionaries
                     );
                 default:
                     throw std::runtime_error("Unsupported integer bit width: " + std::to_string(bit_width));
@@ -284,8 +285,8 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& variadic_counts_idx,
-        const dictionary_cache* dictionaries,
-        const org::apache::arrow::flatbuf::Field& field
+        const org::apache::arrow::flatbuf::Field& field,
+        const dictionary_cache* dictionaries
     )
     {
         const auto* float_type = field.type_as_FloatingPoint();
@@ -303,8 +304,8 @@ namespace sparrow_ipc
                     buffer_index,
                     node_index,
                     variadic_counts_idx,
-                    dictionaries,
-                    field
+                    field,
+                    dictionaries
                 );
             case org::apache::arrow::flatbuf::Precision::SINGLE:
                 return deserialize_primitive<float>(
@@ -317,8 +318,8 @@ namespace sparrow_ipc
                     buffer_index,
                     node_index,
                     variadic_counts_idx,
-                    dictionaries,
-                    field
+                    field,
+                    dictionaries
                 );
             case org::apache::arrow::flatbuf::Precision::DOUBLE:
                 return deserialize_primitive<double>(
@@ -331,8 +332,8 @@ namespace sparrow_ipc
                     buffer_index,
                     node_index,
                     variadic_counts_idx,
-                    dictionaries,
-                    field
+                    field,
+                    dictionaries
                 );
             default:
                 throw std::runtime_error(
@@ -351,8 +352,8 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& /*variadic_counts_idx*/,
-        const dictionary_cache* /*dictionaries*/,
-        const org::apache::arrow::flatbuf::Field& field
+        const org::apache::arrow::flatbuf::Field& field,
+        const dictionary_cache* /*dictionaries*/
     )
     {
         ++node_index;  // Consume one FieldNode for this fixed-size binary array
@@ -379,8 +380,8 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& /*variadic_counts_idx*/,
-        const dictionary_cache* /*dictionaries*/,
-        const org::apache::arrow::flatbuf::Field& field
+        const org::apache::arrow::flatbuf::Field& field,
+        const dictionary_cache* /*dictionaries*/
     )
     {
         ++node_index;  // Consume one FieldNode for this decimal array
@@ -461,8 +462,8 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& /*variadic_counts_idx*/,
-        const dictionary_cache* /*dictionaries*/,
-        const org::apache::arrow::flatbuf::Field&
+        const org::apache::arrow::flatbuf::Field&,
+        const dictionary_cache* /*dictionaries*/
     )
     {
         ++node_index;  // Consume one FieldNode for this null array
@@ -481,8 +482,8 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& /*variadic_counts_idx*/,
-        const dictionary_cache* /*dictionaries*/,
-        const org::apache::arrow::flatbuf::Field& field
+        const org::apache::arrow::flatbuf::Field& field,
+        const dictionary_cache* /*dictionaries*/
     )
     {
         ++node_index;  // Consume one FieldNode for this date array
@@ -522,8 +523,8 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& /*variadic_counts_idx*/,
-        const dictionary_cache* /*dictionaries*/,
-        const org::apache::arrow::flatbuf::Field& field
+        const org::apache::arrow::flatbuf::Field& field,
+        const dictionary_cache* /*dictionaries*/
     )
     {
         ++node_index;  // Consume one FieldNode for this interval array
@@ -577,8 +578,8 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& /*variadic_counts_idx*/,
-        const dictionary_cache* /*dictionaries*/,
-        const org::apache::arrow::flatbuf::Field& field
+        const org::apache::arrow::flatbuf::Field& field,
+        const dictionary_cache* /*dictionaries*/
     )
     {
         ++node_index;  // Consume one FieldNode for this duration array
@@ -644,8 +645,8 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& /*variadic_counts_idx*/,
-        const dictionary_cache* /*dictionaries*/,
-        const org::apache::arrow::flatbuf::Field& field
+        const org::apache::arrow::flatbuf::Field& field,
+        const dictionary_cache* /*dictionaries*/
     )
     {
         ++node_index;  // Consume one FieldNode for this time array
@@ -716,8 +717,8 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& /*variadic_counts_idx*/,
-        const dictionary_cache* /*dictionaries*/,
-        const org::apache::arrow::flatbuf::Field& field
+        const org::apache::arrow::flatbuf::Field& field,
+        const dictionary_cache* /*dictionaries*/
     )
     {
         ++node_index;  // Consume one FieldNode for this timestamp array
@@ -1084,8 +1085,8 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& variadic_counts_idx,
-        const dictionary_cache* dictionaries,
-        const org::apache::arrow::flatbuf::Field& field
+        const org::apache::arrow::flatbuf::Field& field,
+        const dictionary_cache* dictionaries
     )
     {
         return sparrow::array(deserialize_fixed_size_list_array(
@@ -1113,8 +1114,8 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& variadic_counts_idx,
-        const dictionary_cache* dictionaries,
-        const org::apache::arrow::flatbuf::Field& field
+        const org::apache::arrow::flatbuf::Field& field,
+        const dictionary_cache* dictionaries
     )
     {
         return sparrow::array(deserialize_struct_array(
@@ -1142,8 +1143,8 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& variadic_counts_idx,
-        const dictionary_cache* dictionaries,
-        const org::apache::arrow::flatbuf::Field& field
+        const org::apache::arrow::flatbuf::Field& field,
+        const dictionary_cache* dictionaries
     )
     {
         // TODO handle the keyssorted in flags (needs a custom test) when true
@@ -1158,8 +1159,8 @@ namespace sparrow_ipc
                 buffer_index,
                 node_index,
                 variadic_counts_idx,
-                dictionaries,
-                field
+                field,
+                dictionaries
             )
         );
     }
@@ -1174,8 +1175,8 @@ namespace sparrow_ipc
         size_t& buffer_index,
         size_t& node_index,
         size_t& variadic_counts_idx,
-        const dictionary_cache* dictionaries,
-        const org::apache::arrow::flatbuf::Field& field
+        const org::apache::arrow::flatbuf::Field& field,
+        const dictionary_cache* dictionaries
     )
     {
         return sparrow::array(deserialize_run_end_encoded_array(

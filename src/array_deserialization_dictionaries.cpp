@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <string>
 
+#include "bit_width.hpp"
 #include "array_deserializer.hpp"
 
 namespace sparrow_ipc
@@ -127,16 +128,16 @@ namespace sparrow_ipc
 
         switch (bit_width)
         {
-            case sizeof(int8_t) * 8:
+            case BIT_WIDTH_8:
                 return is_signed ? deserialize_for.template operator()<int8_t>()
                                  : deserialize_for.template operator()<uint8_t>();
-            case sizeof(int16_t) * 8:
+            case BIT_WIDTH_16:
                 return is_signed ? deserialize_for.template operator()<int16_t>()
                                  : deserialize_for.template operator()<uint16_t>();
-            case sizeof(int32_t) * 8:
+            case BIT_WIDTH_32:
                 return is_signed ? deserialize_for.template operator()<int32_t>()
                                  : deserialize_for.template operator()<uint32_t>();
-            case sizeof(int64_t) * 8:
+            case BIT_WIDTH_64:
                 return is_signed ? deserialize_for.template operator()<int64_t>()
                                  : deserialize_for.template operator()<uint64_t>();
             default:

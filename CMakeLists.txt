@@ -138,6 +138,7 @@ set(SPARROW_IPC_HEADERS
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserializer.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/dictionary_cache.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/dictionary_iteration.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/dictionary_tracker.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/dictionary_utils.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/encapsulated_message.hpp
@@ -147,6 +148,7 @@ set(SPARROW_IPC_HEADERS
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/metadata.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/serialize_utils.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/serialize.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/serializer_reserve.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/serializer.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/stream_file_serializer.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/utils.hpp
