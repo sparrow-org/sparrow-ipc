@@ -1,3 +1,5 @@
+#pragma once
+
 #include <sparrow/null_array.hpp>
 
 #include "sparrow_ipc/deserialization_context.hpp"

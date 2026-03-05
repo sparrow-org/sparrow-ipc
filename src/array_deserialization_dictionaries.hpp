@@ -3,7 +3,6 @@
 #include <sparrow/array_api.hpp>
 #include <sparrow/arrow_interface/arrow_array.hpp>
 
-#include "Message_generated.h"
 #include "Schema_generated.h"
 
 #include "sparrow_ipc/deserialization_context.hpp"

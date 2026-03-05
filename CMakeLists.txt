@@ -165,6 +165,7 @@ set(SPARROW_IPC_SRC
     ${SPARROW_IPC_SOURCE_DIR}/arrow_interface/arrow_array/private_data.cpp
     ${SPARROW_IPC_SOURCE_DIR}/arrow_interface/arrow_schema.cpp
     ${SPARROW_IPC_SOURCE_DIR}/arrow_interface/arrow_schema/private_data.cpp
+    ${SPARROW_IPC_SOURCE_DIR}/bit_width.hpp
     ${SPARROW_IPC_SOURCE_DIR}/chunk_memory_serializer.cpp
     ${SPARROW_IPC_SOURCE_DIR}/compression_impl.hpp
     ${SPARROW_IPC_SOURCE_DIR}/compression.cpp

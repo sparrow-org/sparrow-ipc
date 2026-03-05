@@ -1,10 +1,11 @@
 #pragma once
 
+#include <cstdint>
 #include <span>
 #include <utility>
+#include <variant>
 
 #include <sparrow/buffer/buffer.hpp>
-#include <sparrow/buffer/dynamic_bitset/dynamic_bitset_view.hpp>
 
 #include "Message_generated.h"
 

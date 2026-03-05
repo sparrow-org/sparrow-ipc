@@ -1,13 +1,11 @@
 #pragma once
 
-#include <cstddef>
 #include <iterator>
-#include <numeric>
 #include <ranges>
+#include <span>
 
 #include <sparrow/record_batch.hpp>
 
-#include "deserialize.hpp"
 #include "sparrow_ipc/deserialize.hpp"
 
 namespace sparrow_ipc

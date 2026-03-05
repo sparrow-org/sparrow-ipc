@@ -1,9 +1,6 @@
 #pragma once
 
-#include <optional>
-#include <span>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include <sparrow/arrow_interface/arrow_array_schema_proxy.hpp>

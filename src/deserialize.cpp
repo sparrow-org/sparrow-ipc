@@ -1,9 +1,12 @@
 #include "sparrow_ipc/deserialize.hpp"
 
+#include <optional>
 #include <unordered_map>
 
 #include "array_deserializer.hpp"
+
 #include <sparrow/c_interface.hpp>
+
 #include "sparrow_ipc/dictionary_cache.hpp"
 #include "sparrow_ipc/encapsulated_message.hpp"
 #include "sparrow_ipc/magic_values.hpp"

@@ -5,7 +5,9 @@
 #include <string>
 #include <vector>
 
+#include "Schema_generated.h"
 #include "Message_generated.h"
+
 #include "sparrow_ipc/dictionary_cache.hpp"
 #include "sparrow_ipc/metadata.hpp"
 

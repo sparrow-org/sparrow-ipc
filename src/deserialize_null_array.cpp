@@ -1,7 +1,6 @@
 #include "sparrow_ipc/deserialize_null_array.hpp"
 
 #include <unordered_set>
-#include <sparrow/null_array.hpp>
 
 #include "sparrow_ipc/arrow_interface/arrow_array.hpp"
 #include "sparrow_ipc/arrow_interface/arrow_schema.hpp"

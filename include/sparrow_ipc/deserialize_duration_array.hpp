@@ -1,10 +1,5 @@
 #pragma once
 
-#include <optional>
-#include <span>
-#include <string_view>
-#include <vector>
-
 #include <sparrow/arrow_interface/arrow_array_schema_proxy.hpp>
 #include <sparrow/duration_array.hpp>
 

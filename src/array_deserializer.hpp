@@ -267,8 +267,8 @@ namespace sparrow_ipc
 
             // Process buffers
             auto processed_validity = process_buffer(utils::get_buffer(context.record_batch, context.body, context.buffer_index));
-            auto processed_offsets  = process_buffer(utils::get_buffer(context.record_batch, context.body, context.buffer_index));
-            auto processed_sizes    = process_buffer(utils::get_buffer(context.record_batch, context.body, context.buffer_index));
+            auto processed_offsets = process_buffer(utils::get_buffer(context.record_batch, context.body, context.buffer_index));
+            auto processed_sizes = process_buffer(utils::get_buffer(context.record_batch, context.body, context.buffer_index));
 
             {
                 using offset_type = typename T::offset_type;

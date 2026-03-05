@@ -1,5 +1,7 @@
 #include "sparrow_ipc/deserialize_utils.hpp"
 
+#include <sparrow/buffer/dynamic_bitset/dynamic_bitset_view.hpp>
+
 #include "compression_impl.hpp"
 
 namespace sparrow_ipc::utils

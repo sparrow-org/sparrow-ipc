@@ -2,7 +2,6 @@
 
 #include <cstddef>
 #include <optional>
-#include <span>
 #include <string_view>
 #include <unordered_set>
 #include <vector>
