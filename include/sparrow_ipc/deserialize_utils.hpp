@@ -1,13 +1,17 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <span>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 
 #include <sparrow/buffer/buffer.hpp>
+#include <sparrow/c_interface.hpp>
 
 #include "Message_generated.h"
+#include "Schema_generated.h"
 
 namespace sparrow_ipc::utils
 {
@@ -68,4 +72,33 @@ namespace sparrow_ipc::utils
         std::span<const uint8_t> buffer_span,
         const org::apache::arrow::flatbuf::BodyCompression* compression
     );
+
+    /**
+     * @brief Extract sparrow flags from FlatBuffers Field.
+     *
+     * @param field The FlatBuffers Field object.
+     * @return std::optional<std::unordered_set<sparrow::ArrowFlag>> The sparrow flags.
+     */
+    [[nodiscard]] std::optional<std::unordered_set<sparrow::ArrowFlag>>
+    get_sparrow_flags(const org::apache::arrow::flatbuf::Field& field);
+
+    /**
+     * @brief Safely extracts a string from a FlatBuffers object that has a name() method.
+     *
+     * @tparam T The type of the FlatBuffers object (e.g., org::apache::arrow::flatbuf::Field)
+     * @param obj Pointer to the FlatBuffers object (can be null)
+     * @param default_val Value to return if obj or name() is null
+     * @return std::string The extracted name or the default value
+     */
+    template <typename T>
+    inline std::string get_fb_name(const T* obj, const std::string& default_val = "")
+    {
+        if (!obj)
+        {
+            return default_val;
+        }
+
+        auto name = obj->name();
+        return name ? name->str() : default_val;
+    }
 }

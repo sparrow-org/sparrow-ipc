@@ -16,14 +16,7 @@ namespace sparrow_ipc
             sparrow::detail::get_data_type_from_array<sparrow::null_array>::get()
         );
 
-        // Set up flags based on nullable
-        std::optional<std::unordered_set<sparrow::ArrowFlag>> flags;
-        if (field_desc.nullable)
-        {
-            flags = std::unordered_set<sparrow::ArrowFlag>{sparrow::ArrowFlag::NULLABLE};
-        }
-
-        ArrowSchema schema = make_non_owning_arrow_schema(format, field_desc.name, field_desc.metadata, flags, 0, nullptr, nullptr);
+        ArrowSchema schema = make_non_owning_arrow_schema(format, field_desc.name, field_desc.metadata, field_desc.flags, 0, nullptr, nullptr);
         std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
         ArrowArray array = make_arrow_array<arrow_array_private_data>(
             field_desc.length,

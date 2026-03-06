@@ -3,6 +3,7 @@
 #include <functional>
 #include <string>
 
+#include <sparrow/arrow_interface/arrow_flag_utils.hpp>
 #include <sparrow/utils/ranges.hpp>
 
 #include "compression_impl.hpp"
@@ -77,7 +78,11 @@ namespace sparrow_ipc
     }
 
     std::pair<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>>
-    get_flatbuffer_type(flatbuffers::FlatBufferBuilder& builder, std::string_view format_str)
+    get_flatbuffer_type(
+        flatbuffers::FlatBufferBuilder& builder,
+        std::string_view format_str,
+        const std::optional<std::unordered_set<sparrow::ArrowFlag>>& flags
+    )
     {
         const auto type = sparrow::format_to_data_type(format_str);
         switch (type)
@@ -371,8 +376,8 @@ namespace sparrow_ipc
             }
             case sparrow::data_type::MAP:
             {
-                // not sorted keys
-                const auto map_type = org::apache::arrow::flatbuf::CreateMap(builder, false);
+                const bool keys_sorted = flags.has_value() && flags.value().contains(sparrow::ArrowFlag::MAP_KEYS_SORTED);
+                const auto map_type = org::apache::arrow::flatbuf::CreateMap(builder, keys_sorted);
                 return {org::apache::arrow::flatbuf::Type::Map, map_type.Union()};
             }
             case sparrow::data_type::DENSE_UNION:
@@ -527,7 +532,8 @@ namespace sparrow_ipc
             : (arrow_schema.name != nullptr ? arrow_schema.name : "field");
 
         flatbuffers::Offset<flatbuffers::String> fb_name_offset = builder.CreateString(field_name);
-        const auto [type_enum, type_offset] = get_flatbuffer_type(builder, value_schema.format);
+        const auto flags = sparrow::to_set_of_ArrowFlags(value_schema.flags);
+        const auto [type_enum, type_offset] = get_flatbuffer_type(builder, value_schema.format, flags);
         auto fb_metadata_offset = create_metadata(builder, arrow_schema);
 
         // Handle dictionary encoding
