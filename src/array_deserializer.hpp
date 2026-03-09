@@ -436,5 +436,8 @@ namespace sparrow_ipc
 
         static sparrow::array deserialize_run_end_encoded(deserialization_context& context,
                                                           const field_descriptor& field_desc);
+
+        static sparrow::array deserialize_union(deserialization_context& context,
+                                                const field_descriptor& field_desc);
     };
 }

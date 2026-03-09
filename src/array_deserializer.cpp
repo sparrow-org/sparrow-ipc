@@ -14,6 +14,7 @@
 #include "sparrow_ipc/deserialize_null_array.hpp"
 #include "sparrow_ipc/deserialize_run_end_encoded_array.hpp"
 #include "sparrow_ipc/deserialize_time_related_arrays.hpp"
+#include "sparrow_ipc/deserialize_union_array.hpp"
 #include "sparrow_ipc/dictionary_cache.hpp"
 
 namespace sparrow_ipc
@@ -57,6 +58,7 @@ namespace sparrow_ipc
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Struct_] = &deserialize_struct;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::Map] = &deserialize_map;
         m_deserializer_map[org::apache::arrow::flatbuf::Type::RunEndEncoded] = &deserialize_run_end_encoded;
+        m_deserializer_map[org::apache::arrow::flatbuf::Type::Union] = &deserialize_union;
     }
 
     sparrow::array array_deserializer::deserialize(deserialization_context& context, const field_descriptor& field_desc)
@@ -518,5 +520,12 @@ namespace sparrow_ipc
     )
     {
         return sparrow::array(deserialize_run_end_encoded_array(context, field_desc));
+    }
+
+    sparrow::array array_deserializer::deserialize_union(
+        deserialization_context& context, const field_descriptor& field_desc
+    )
+    {
+        return deserialize_union_array(context, field_desc);
     }
 }

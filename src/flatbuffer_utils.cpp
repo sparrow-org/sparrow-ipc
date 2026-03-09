@@ -35,6 +35,12 @@ namespace sparrow_ipc
             const sparrow::record_batch& record_batch,
             int64_t& next_fallback_dictionary_id
         );
+
+        std::pair<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>>
+        get_flatbuffer_union_type(
+            flatbuffers::FlatBufferBuilder& builder,
+            std::string_view format_str,
+            org::apache::arrow::flatbuf::UnionMode union_mode);
     }
 
     namespace details
@@ -382,21 +388,17 @@ namespace sparrow_ipc
             }
             case sparrow::data_type::DENSE_UNION:
             {
-                const auto union_type = org::apache::arrow::flatbuf::CreateUnion(
+                return get_flatbuffer_union_type(
                     builder,
-                    org::apache::arrow::flatbuf::UnionMode::Dense,
-                    0
-                );
-                return {org::apache::arrow::flatbuf::Type::Union, union_type.Union()};
+                    format_str,
+                    org::apache::arrow::flatbuf::UnionMode::Dense);
             }
             case sparrow::data_type::SPARSE_UNION:
             {
-                const auto union_type = org::apache::arrow::flatbuf::CreateUnion(
+                return get_flatbuffer_union_type(
                     builder,
-                    org::apache::arrow::flatbuf::UnionMode::Sparse,
-                    0
-                );
-                return {org::apache::arrow::flatbuf::Type::Union, union_type.Union()};
+                    format_str,
+                    org::apache::arrow::flatbuf::UnionMode::Sparse);
             }
             case sparrow::data_type::RUN_ENCODED:
             {
@@ -523,89 +525,89 @@ namespace sparrow_ipc
             int64_t& next_fallback_dictionary_id
         )
         {
-        const bool is_dictionary_encoded = arrow_schema.dictionary != nullptr;
-        const ArrowSchema& value_schema = is_dictionary_encoded ? *arrow_schema.dictionary : arrow_schema;
+            const bool is_dictionary_encoded = arrow_schema.dictionary != nullptr;
+            const ArrowSchema& value_schema = is_dictionary_encoded ? *arrow_schema.dictionary : arrow_schema;
 
-        // Determine the field name to use
-        const std::string field_name = name_override.has_value() 
-            ? std::string(name_override.value())
-            : (arrow_schema.name != nullptr ? arrow_schema.name : "field");
+            // Determine the field name to use
+            const std::string field_name = name_override.has_value()
+                ? std::string(name_override.value())
+                : (arrow_schema.name != nullptr ? arrow_schema.name : "field");
 
-        flatbuffers::Offset<flatbuffers::String> fb_name_offset = builder.CreateString(field_name);
-        const auto flags = sparrow::to_set_of_ArrowFlags(value_schema.flags);
-        const auto [type_enum, type_offset] = get_flatbuffer_type(builder, value_schema.format, flags);
-        auto fb_metadata_offset = create_metadata(builder, arrow_schema);
+            flatbuffers::Offset<flatbuffers::String> fb_name_offset = builder.CreateString(field_name);
+            const auto flags = sparrow::to_set_of_ArrowFlags(value_schema.flags);
+            const auto [type_enum, type_offset] = get_flatbuffer_type(builder, value_schema.format, flags);
+            auto fb_metadata_offset = create_metadata(builder, arrow_schema);
 
-        // Handle dictionary encoding
-        flatbuffers::Offset<org::apache::arrow::flatbuf::DictionaryEncoding> dictionary_offset = 0;
-        if (is_dictionary_encoded)
-        {
-            // Extract dictionary metadata
-            const auto dict_metadata = parse_dictionary_metadata(arrow_schema);
-            const bool is_ordered = dict_metadata.is_ordered;
-
-            // If no ID in metadata, use the provided override or a traversal-based incremental fallback ID
-            const int64_t fallback_id = dictionary_id_override.value_or(next_fallback_dictionary_id++);
-            const int64_t dict_id = dict_metadata.id.value_or(fallback_id);
-
-            // Create index type from the schema's format (the indices type)
-            const auto index_data_type = sparrow::format_to_data_type(arrow_schema.format);
-            flatbuffers::Offset<org::apache::arrow::flatbuf::Int> index_type_offset;
-
-            switch (index_data_type)
+            // Handle dictionary encoding
+            flatbuffers::Offset<org::apache::arrow::flatbuf::DictionaryEncoding> dictionary_offset = 0;
+            if (is_dictionary_encoded)
             {
-                case sparrow::data_type::UINT8:
-                    index_type_offset = org::apache::arrow::flatbuf::CreateInt(builder, 8, false);
-                    break;
-                case sparrow::data_type::INT8:
-                    index_type_offset = org::apache::arrow::flatbuf::CreateInt(builder, 8, true);
-                    break;
-                case sparrow::data_type::UINT16:
-                    index_type_offset = org::apache::arrow::flatbuf::CreateInt(builder, 16, false);
-                    break;
-                case sparrow::data_type::INT16:
-                    index_type_offset = org::apache::arrow::flatbuf::CreateInt(builder, 16, true);
-                    break;
-                case sparrow::data_type::UINT32:
-                    index_type_offset = org::apache::arrow::flatbuf::CreateInt(builder, 32, false);
-                    break;
-                case sparrow::data_type::INT32:
-                    index_type_offset = org::apache::arrow::flatbuf::CreateInt(builder, 32, true);
-                    break;
-                case sparrow::data_type::UINT64:
-                    index_type_offset = org::apache::arrow::flatbuf::CreateInt(builder, 64, false);
-                    break;
-                case sparrow::data_type::INT64:
-                    index_type_offset = org::apache::arrow::flatbuf::CreateInt(builder, 64, true);
-                    break;
-                default:
-                    throw std::runtime_error("Dictionary index type must be an integer type");
+                // Extract dictionary metadata
+                const auto dict_metadata = parse_dictionary_metadata(arrow_schema);
+                const bool is_ordered = dict_metadata.is_ordered;
+
+                // If no ID in metadata, use the provided override or a traversal-based incremental fallback ID
+                const int64_t fallback_id = dictionary_id_override.value_or(next_fallback_dictionary_id++);
+                const int64_t dict_id = dict_metadata.id.value_or(fallback_id);
+
+                // Create index type from the schema's format (the indices type)
+                const auto index_data_type = sparrow::format_to_data_type(arrow_schema.format);
+                flatbuffers::Offset<org::apache::arrow::flatbuf::Int> index_type_offset;
+
+                switch (index_data_type)
+                {
+                    case sparrow::data_type::UINT8:
+                        index_type_offset = org::apache::arrow::flatbuf::CreateInt(builder, 8, false);
+                        break;
+                    case sparrow::data_type::INT8:
+                        index_type_offset = org::apache::arrow::flatbuf::CreateInt(builder, 8, true);
+                        break;
+                    case sparrow::data_type::UINT16:
+                        index_type_offset = org::apache::arrow::flatbuf::CreateInt(builder, 16, false);
+                        break;
+                    case sparrow::data_type::INT16:
+                        index_type_offset = org::apache::arrow::flatbuf::CreateInt(builder, 16, true);
+                        break;
+                    case sparrow::data_type::UINT32:
+                        index_type_offset = org::apache::arrow::flatbuf::CreateInt(builder, 32, false);
+                        break;
+                    case sparrow::data_type::INT32:
+                        index_type_offset = org::apache::arrow::flatbuf::CreateInt(builder, 32, true);
+                        break;
+                    case sparrow::data_type::UINT64:
+                        index_type_offset = org::apache::arrow::flatbuf::CreateInt(builder, 64, false);
+                        break;
+                    case sparrow::data_type::INT64:
+                        index_type_offset = org::apache::arrow::flatbuf::CreateInt(builder, 64, true);
+                        break;
+                    default:
+                        throw std::runtime_error("Dictionary index type must be an integer type");
+                }
+
+                // Create DictionaryEncoding
+                dictionary_offset = org::apache::arrow::flatbuf::CreateDictionaryEncoding(
+                    builder,
+                    dict_id,
+                    index_type_offset,
+                    is_ordered,
+                    org::apache::arrow::flatbuf::DictionaryKind::DenseArray
+                );
             }
 
-            // Create DictionaryEncoding
-            dictionary_offset = org::apache::arrow::flatbuf::CreateDictionaryEncoding(
+            const auto children = create_children_impl(builder, value_schema, next_fallback_dictionary_id);
+
+            const auto fb_field = org::apache::arrow::flatbuf::CreateField(
                 builder,
-                dict_id,
-                index_type_offset,
-                is_ordered,
-                org::apache::arrow::flatbuf::DictionaryKind::DenseArray
+                fb_name_offset,
+                (arrow_schema.flags & static_cast<int64_t>(sparrow::ArrowFlag::NULLABLE)) != 0,
+                type_enum,
+                type_offset,
+                dictionary_offset,
+                children,
+                fb_metadata_offset
             );
+            return fb_field;
         }
-
-        const auto children = create_children_impl(builder, value_schema, next_fallback_dictionary_id);
-
-        const auto fb_field = org::apache::arrow::flatbuf::CreateField(
-            builder,
-            fb_name_offset,
-            (arrow_schema.flags & static_cast<int64_t>(sparrow::ArrowFlag::NULLABLE)) != 0,
-            type_enum,
-            type_offset,
-            dictionary_offset,
-            children,
-            fb_metadata_offset
-        );
-        return fb_field;
-    }
     }
 
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<org::apache::arrow::flatbuf::Field>>>
@@ -624,32 +626,32 @@ namespace sparrow_ipc
             int64_t& next_fallback_dictionary_id
         )
         {
-        std::vector<flatbuffers::Offset<org::apache::arrow::flatbuf::Field>> children_vec;
-        children_vec.reserve(arrow_schema.n_children);
-        for (size_t i = 0; i < arrow_schema.n_children; ++i)
-        {
-            if (arrow_schema.children[i] == nullptr)
+            std::vector<flatbuffers::Offset<org::apache::arrow::flatbuf::Field>> children_vec;
+            children_vec.reserve(arrow_schema.n_children);
+            for (size_t i = 0; i < arrow_schema.n_children; ++i)
             {
-                throw std::invalid_argument("ArrowSchema has null child pointer");
+                if (arrow_schema.children[i] == nullptr)
+                {
+                    throw std::invalid_argument("ArrowSchema has null child pointer");
+                }
+                const auto& child = *arrow_schema.children[i];
+                const std::string field_name = child.name != nullptr
+                                                ? child.name
+                                                : (arrow_schema.name != nullptr ? std::string(arrow_schema.name)
+                                                                                : "base")
+                                                        + "_child_" + std::to_string(i);
+                flatbuffers::Offset<org::apache::arrow::flatbuf::Field>
+                    field = create_field_impl(
+                        builder,
+                        child,
+                        field_name,
+                        std::nullopt,
+                        next_fallback_dictionary_id
+                    );
+                children_vec.emplace_back(field);
             }
-            const auto& child = *arrow_schema.children[i];
-            const std::string field_name = child.name != nullptr
-                                               ? child.name
-                                               : (arrow_schema.name != nullptr ? std::string(arrow_schema.name)
-                                                                               : "base")
-                                                     + "_child_" + std::to_string(i);
-            flatbuffers::Offset<org::apache::arrow::flatbuf::Field>
-                field = create_field_impl(
-                    builder,
-                    child,
-                    field_name,
-                    std::nullopt,
-                    next_fallback_dictionary_id
-                );
-            children_vec.emplace_back(field);
+            return children_vec.empty() ? 0 : builder.CreateVector(children_vec);
         }
-        return children_vec.empty() ? 0 : builder.CreateVector(children_vec);
-    }
     }
 
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<org::apache::arrow::flatbuf::Field>>>
@@ -668,26 +670,56 @@ namespace sparrow_ipc
             int64_t& next_fallback_dictionary_id
         )
         {
-        const auto& columns = record_batch.columns();
-        std::vector<flatbuffers::Offset<org::apache::arrow::flatbuf::Field>> children_vec;
-        children_vec.reserve(columns.size());
-        const auto names = record_batch.names();
-        for (size_t i = 0; i < columns.size(); ++i)
-        {
-            const auto& arrow_schema = sparrow::detail::array_access::get_arrow_proxy(columns[i]).schema();
-            const auto& field_name = names[i];
-            flatbuffers::Offset<org::apache::arrow::flatbuf::Field>
-                field = create_field_impl(
-                    builder,
-                    arrow_schema,
-                    field_name,
-                    std::nullopt,
-                    next_fallback_dictionary_id
-                );
-            children_vec.emplace_back(field);
+            const auto& columns = record_batch.columns();
+            std::vector<flatbuffers::Offset<org::apache::arrow::flatbuf::Field>> children_vec;
+            children_vec.reserve(columns.size());
+            const auto names = record_batch.names();
+            for (size_t i = 0; i < columns.size(); ++i)
+            {
+                const auto& arrow_schema = sparrow::detail::array_access::get_arrow_proxy(columns[i]).schema();
+                const auto& field_name = names[i];
+                flatbuffers::Offset<org::apache::arrow::flatbuf::Field>
+                    field = create_field_impl(
+                        builder,
+                        arrow_schema,
+                        field_name,
+                        std::nullopt,
+                        next_fallback_dictionary_id
+                    );
+                children_vec.emplace_back(field);
+            }
+            return children_vec.empty() ? 0 : builder.CreateVector(children_vec);
         }
-        return children_vec.empty() ? 0 : builder.CreateVector(children_vec);
     }
+
+    namespace
+    {
+        std::pair<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>>
+        get_flatbuffer_union_type(
+            flatbuffers::FlatBufferBuilder& builder,
+            std::string_view format_str,
+            org::apache::arrow::flatbuf::UnionMode union_mode)
+        {
+            const auto type_ids_strs = utils::extract_words_after_colon(format_str);
+            std::vector<int32_t> type_ids;
+            type_ids.reserve(type_ids_strs.size());
+            for (const auto& id_str : type_ids_strs)
+            {
+                const auto id = utils::parse_to_int32(id_str);
+                if (!id)
+                {
+                    throw std::runtime_error("Failed to parse type ID from union format string: " + std::string(format_str));
+                }
+                type_ids.push_back(*id);
+            }
+            const auto type_ids_offset = builder.CreateVector(type_ids);
+            const auto union_type = org::apache::arrow::flatbuf::CreateUnion(
+                builder,
+                union_mode,
+                type_ids_offset
+            );
+            return {org::apache::arrow::flatbuf::Type::Union, union_type.Union()};
+        }
     }
 
     flatbuffers::FlatBufferBuilder get_schema_message_builder(const sparrow::record_batch& record_batch)
