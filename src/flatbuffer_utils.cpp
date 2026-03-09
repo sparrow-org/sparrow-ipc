@@ -376,7 +376,7 @@ namespace sparrow_ipc
             }
             case sparrow::data_type::MAP:
             {
-                const bool keys_sorted = flags.has_value() && flags.value().contains(sparrow::ArrowFlag::MAP_KEYS_SORTED);
+                const bool keys_sorted = flags && flags->contains(sparrow::ArrowFlag::MAP_KEYS_SORTED);
                 const auto map_type = org::apache::arrow::flatbuf::CreateMap(builder, keys_sorted);
                 return {org::apache::arrow::flatbuf::Type::Map, map_type.Union()};
             }
