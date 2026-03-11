@@ -22,7 +22,7 @@ namespace sparrow_ipc
     public:
 
         using optionally_owned_buffer = std::variant<sparrow::buffer<uint8_t>, std::span<const uint8_t>>;
-        explicit arrow_array_private_data(std::vector<optionally_owned_buffer>&& buffers);
+        SPARROW_IPC_API explicit arrow_array_private_data(std::vector<optionally_owned_buffer>&& buffers);
 
         [[nodiscard]] SPARROW_IPC_API const void** buffers_ptrs() noexcept;
         [[nodiscard]] SPARROW_IPC_API std::size_t n_buffers() const noexcept;
