@@ -29,7 +29,7 @@ const std::filesystem::path tests_resources_files_path = arrow_testing_data_dir 
 const std::filesystem::path tests_resources_files_path_with_compression = arrow_testing_data_dir / "data"
                                                                           / "arrow-ipc-stream" / "integration"
                                                                           / "2.0.0-compression";
-//
+
 const std::vector<std::filesystem::path> files_paths_to_test = {
     tests_resources_files_path / "generated_primitive",
     tests_resources_files_path / "generated_primitive_zerolength",
@@ -61,6 +61,9 @@ const std::vector<std::filesystem::path> files_paths_to_test = {
     tests_resources_files_path / "generated_dictionary_unsigned",
     tests_resources_files_path / "generated_nested_dictionary",
     tests_resources_files_path / "generated_union",
+    tests_resources_files_path / "generated_duplicate_fieldnames",
+    tests_resources_files_path / "generated_custom_metadata",
+    tests_resources_files_path / "generated_interval_mdn",
 };
 
 const std::vector<std::filesystem::path> files_paths_to_test_with_lz4_compression = {
