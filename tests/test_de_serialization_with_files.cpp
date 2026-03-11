@@ -228,14 +228,14 @@ void compare_metadata(const sparrow::arrow_proxy& proxy1, const sparrow::arrow_p
 
     REQUIRE_EQ(metadata1.size(), metadata2.size());
 
-    std::map<std::string, std::string> map1, map2;
+    std::map<std::string_view, std::string_view> map1, map2;
     for (const auto& [key, value] : metadata1)
     {
-        map1[std::string(key)] = std::string(value);
+        map1[key] = value;
     }
     for (const auto& [key, value] : metadata2)
     {
-        map2[std::string(key)] = std::string(value);
+        map2[key] = value;
     }
     CHECK_EQ(map1, map2);
 }
