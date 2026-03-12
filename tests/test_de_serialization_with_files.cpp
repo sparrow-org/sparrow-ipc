@@ -243,11 +243,7 @@ void compare_metadata(const sparrow::arrow_proxy& proxy1, const sparrow::arrow_p
     const auto map1 = to_map(metadata1);
     const auto map2 = to_map(metadata2);
 
-    // if (map1 != map2)
-    // {
-    //     std::cout << "Metadata mismatch detected!" << std::endl;
-    //     CHECK_EQ(map1, map2);
-    // }
+    CHECK_EQ(map1, map2);
 }
 
 void compare_raw_buffers(const sparrow::arrow_proxy& proxy1, const sparrow::arrow_proxy& proxy2)
