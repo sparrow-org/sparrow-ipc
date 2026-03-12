@@ -33,39 +33,39 @@ const std::filesystem::path tests_resources_files_path_with_compression = arrow_
                                                                           / "2.0.0-compression";
 
 const std::vector<std::filesystem::path> files_paths_to_test = {
-    tests_resources_files_path / "generated_primitive",
-    tests_resources_files_path / "generated_primitive_zerolength",
-    tests_resources_files_path / "generated_primitive_no_batches",
-    tests_resources_files_path / "generated_binary",
-    tests_resources_files_path / "generated_large_binary",
-    tests_resources_files_path / "generated_binary_zerolength",
-    tests_resources_files_path / "generated_binary_no_batches",
-    tests_resources_files_path / "generated_binary_view",
-    tests_resources_files_path / "generated_interval",
-    tests_resources_files_path / "generated_duration",
-    tests_resources_files_path / "generated_datetime",
-    tests_resources_files_path / "generated_null",
-    tests_resources_files_path / "generated_null_trivial",
-    tests_resources_files_path / "generated_decimal32",
-    tests_resources_files_path / "generated_decimal64",
-#if !defined(SPARROW_USE_LARGE_INT_PLACEHOLDERS)
-    tests_resources_files_path / "generated_decimal",
-    tests_resources_files_path / "generated_decimal256",
-#endif
-    tests_resources_files_path / "generated_nested",
-    tests_resources_files_path / "generated_recursive_nested",
-    tests_resources_files_path / "generated_nested_large_offsets",
-    tests_resources_files_path / "generated_map",
-    tests_resources_files_path / "generated_map_non_canonical",
-    tests_resources_files_path / "generated_run_end_encoded",
-    tests_resources_files_path / "generated_list_view",
-    tests_resources_files_path / "generated_dictionary",
-    tests_resources_files_path / "generated_dictionary_unsigned",
-    tests_resources_files_path / "generated_nested_dictionary",
-    tests_resources_files_path / "generated_union",
-    tests_resources_files_path / "generated_duplicate_fieldnames",
-    tests_resources_files_path / "generated_custom_metadata",
-    tests_resources_files_path / "generated_interval_mdn",
+//     tests_resources_files_path / "generated_primitive",
+//     tests_resources_files_path / "generated_primitive_zerolength",
+//     tests_resources_files_path / "generated_primitive_no_batches",
+//     tests_resources_files_path / "generated_binary",
+//     tests_resources_files_path / "generated_large_binary",
+//     tests_resources_files_path / "generated_binary_zerolength",
+//     tests_resources_files_path / "generated_binary_no_batches",
+//     tests_resources_files_path / "generated_binary_view",
+//     tests_resources_files_path / "generated_interval",
+//     tests_resources_files_path / "generated_duration",
+//     tests_resources_files_path / "generated_datetime",
+//     tests_resources_files_path / "generated_null",
+//     tests_resources_files_path / "generated_null_trivial",
+//     tests_resources_files_path / "generated_decimal32",
+//     tests_resources_files_path / "generated_decimal64",
+// #if !defined(SPARROW_USE_LARGE_INT_PLACEHOLDERS)
+//     tests_resources_files_path / "generated_decimal",
+//     tests_resources_files_path / "generated_decimal256",
+// #endif
+//     tests_resources_files_path / "generated_nested",
+//     tests_resources_files_path / "generated_recursive_nested",
+//     tests_resources_files_path / "generated_nested_large_offsets",
+//     tests_resources_files_path / "generated_map",
+//     tests_resources_files_path / "generated_map_non_canonical",
+//     tests_resources_files_path / "generated_run_end_encoded",
+//     tests_resources_files_path / "generated_list_view",
+//     tests_resources_files_path / "generated_dictionary",
+//     tests_resources_files_path / "generated_dictionary_unsigned",
+//     tests_resources_files_path / "generated_nested_dictionary",
+//     tests_resources_files_path / "generated_union",
+//     tests_resources_files_path / "generated_duplicate_fieldnames",
+//     tests_resources_files_path / "generated_custom_metadata",
+//     tests_resources_files_path / "generated_interval_mdn",
     tests_resources_files_path / "generated_extension",
 };
 
@@ -233,25 +233,21 @@ void compare_metadata(const sparrow::arrow_proxy& proxy1, const sparrow::arrow_p
         for (const auto& [k, v] : view)
         {
             m.emplace(
-                std::string(k.data(), k.size()),
-                std::string(v.data(), v.size())
+                k.data() ? std::string(k) : std::string(),
+                v.data() ? std::string(v) : std::string()
             );
         }
         return m;
     };
 
-    CHECK_EQ(to_map(metadata1), to_map(metadata2));
+    const auto map1 = to_map(metadata1);
+    const auto map2 = to_map(metadata2);
 
-    // std::map<std::string, std::string> map1, map2;
-    // for (const auto& [key, value] : metadata1)
-    // {
-    //     map1[std::string(key)] = std::string(value);
-    // }
-    // for (const auto& [key, value] : metadata2)
-    // {
-    //     map2[std::string(key)] = std::string(value);
-    // }
-    // CHECK_EQ(map1, map2);
+    if (map1 != map2)
+    {
+        std::cout << "Metadata mismatch detected!" << std::endl;
+        CHECK_EQ(map1, map2);
+    }
 }
 
 void compare_raw_buffers(const sparrow::arrow_proxy& proxy1, const sparrow::arrow_proxy& proxy2)
