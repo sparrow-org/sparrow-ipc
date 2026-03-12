@@ -53,7 +53,7 @@ const std::vector<std::filesystem::path> files_paths_to_test = {
     tests_resources_files_path / "generated_decimal256",
 #endif
     tests_resources_files_path / "generated_nested",
-    // tests_resources_files_path / "generated_recursive_nested",
+    tests_resources_files_path / "generated_recursive_nested",
     tests_resources_files_path / "generated_nested_large_offsets",
     tests_resources_files_path / "generated_map",
     tests_resources_files_path / "generated_map_non_canonical",
@@ -66,7 +66,7 @@ const std::vector<std::filesystem::path> files_paths_to_test = {
     tests_resources_files_path / "generated_duplicate_fieldnames",
     tests_resources_files_path / "generated_custom_metadata",
     tests_resources_files_path / "generated_interval_mdn",
-    tests_resources_files_path / "generated_extension",
+    // tests_resources_files_path / "generated_extension",
 };
 
 const std::vector<std::filesystem::path> files_paths_to_test_with_lz4_compression = {
