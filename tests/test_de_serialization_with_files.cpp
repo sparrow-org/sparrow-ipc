@@ -226,16 +226,23 @@ void compare_metadata(const sparrow::arrow_proxy& proxy1, const sparrow::arrow_p
     const auto& metadata1 = opt_metadata1.value();
     const auto& metadata2 = opt_metadata2.value();
 
-    REQUIRE_EQ(metadata1.size(), metadata2.size());
+    if (metadata1.empty() && metadata2.empty())
+    {
+        std::cout << "metadata empty returning! " << std::endl;
+        return;
+    }
 
-    std::map<std::string_view, std::string_view> map1, map2;
+    REQUIRE_EQ(metadata1.size(), metadata2.size());
+    std::cout << "metadata size: " << metadata1.size() << " and " << metadata2.size() << std::endl;
+
+    std::map<std::string, std::string> map1, map2;
     for (const auto& [key, value] : metadata1)
     {
-        map1[key] = value;
+        map1[std::string(key)] = std::string(value);
     }
     for (const auto& [key, value] : metadata2)
     {
-        map2[key] = value;
+        map2[std::string(key)] = std::string(value);
     }
     CHECK_EQ(map1, map2);
 }
