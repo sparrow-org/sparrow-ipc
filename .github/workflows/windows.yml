@@ -54,8 +54,7 @@ jobs:
 
       - name: Run tests
         working-directory: build
-        run: |
-          cmake --build . --config ${{ matrix.build_type }} --target run_tests_with_junit_report
+        run: ./bin/test_sparrow_ipc_lib.exe --success
 
       - name: Build example
         working-directory: build
@@ -121,7 +120,7 @@ jobs:
 
       - name: Run tests
         working-directory: build
-        run: cmake --build . --config ${{ matrix.build_type }} --target run_tests_with_junit_report
+        run: ./bin/test_sparrow_ipc_lib.exe --success
 
       - name: Build example
         working-directory: build
