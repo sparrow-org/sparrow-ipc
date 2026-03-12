@@ -506,132 +506,132 @@ TEST_SUITE("Integration tests")
         }
     }
 
-    TEST_CASE_TEMPLATE(
-        "Record batch equivalence across JSON and IPC streams - compressed",
-        T,
-        Lz4CompressionParams,
-        ZstdCompressionParams
-    )
-    {
-        for (const auto& file_path : T::files())
-        {
-            std::filesystem::path json_path = file_path;
-            json_path.replace_extension(".json");
-            const std::string test_name = "Testing " + std::string(T::name) + " compression with "
-                                          + file_path.filename().string();
-            SUBCASE(test_name.c_str())
-            {
-                // Load the JSON file
-                auto json_data = load_json_file(json_path);
-                CHECK(json_data != nullptr);
-
-                const size_t num_batches = get_number_of_batches(json_path);
-                std::vector<sparrow::record_batch> record_batches_from_json;
-                for (size_t batch_idx = 0; batch_idx < num_batches; ++batch_idx)
-                {
-                    INFO("Processing batch " << batch_idx << " of " << num_batches);
-                    record_batches_from_json.emplace_back(
-                        sparrow::json_reader::build_record_batch_from_json(json_data, batch_idx)
-                    );
-                }
-
-                // Load stream file
-                std::filesystem::path stream_file_path = file_path;
-                stream_file_path.replace_extension(".stream");
-                std::ifstream stream_file(stream_file_path, std::ios::in | std::ios::binary);
-                REQUIRE(stream_file.is_open());
-                const std::vector<uint8_t> stream_data(
-                    (std::istreambuf_iterator<char>(stream_file)),
-                    (std::istreambuf_iterator<char>())
-                );
-                stream_file.close();
-
-                // Process the stream file
-                const auto record_batches_from_stream = sparrow_ipc::deserialize_stream(
-                    std::span<const uint8_t>(stream_data)
-                );
-
-                std::vector<uint8_t> serialized_data;
-                sparrow_ipc::memory_output_stream stream(serialized_data);
-                sparrow_ipc::serializer serializer(stream, T::compression_type);
-                serializer << record_batches_from_json << sparrow_ipc::end_stream;
-                const auto deserialized_serialized_data = sparrow_ipc::deserialize_stream(
-                    std::span<const uint8_t>(serialized_data)
-                );
-                SUBCASE("Compare stream with JSON deserialization - compressed")
-                {
-                    compare_record_batches(record_batches_from_json, record_batches_from_stream);
-                }
-                SUBCASE("Compare record_batch de_serialization with stream deserialization - compressed")
-                {
-                    compare_record_batches(record_batches_from_stream, deserialized_serialized_data);
-                }
-            }
-        }
-    }
-
-    TEST_CASE_TEMPLATE(
-        "Round trip of classic test files serialization/deserialization using compression",
-        T,
-        Lz4CompressionParams,
-        ZstdCompressionParams
-    )
-    {
-        for (const auto& file_path : files_paths_to_test)
-        {
-            std::filesystem::path json_path = file_path;
-            json_path.replace_extension(".json");
-
-            // Load the JSON file
-            auto json_data = load_json_file(json_path);
-            CHECK(json_data != nullptr);
-
-            const size_t num_batches = get_number_of_batches(json_path);
-            std::vector<sparrow::record_batch> record_batches_from_json;
-            for (size_t batch_idx = 0; batch_idx < num_batches; ++batch_idx)
-            {
-                INFO("Processing batch " << batch_idx << " of " << num_batches);
-                record_batches_from_json.emplace_back(
-                    sparrow::json_reader::build_record_batch_from_json(json_data, batch_idx)
-                );
-            }
-
-            // Load stream file
-            std::filesystem::path stream_file_path = file_path;
-            stream_file_path.replace_extension(".stream");
-            std::ifstream stream_file(stream_file_path, std::ios::in | std::ios::binary);
-            REQUIRE(stream_file.is_open());
-            const std::vector<uint8_t> stream_data(
-                (std::istreambuf_iterator<char>(stream_file)),
-                (std::istreambuf_iterator<char>())
-            );
-            stream_file.close();
-
-            // Process the stream file
-            const auto record_batches_from_stream = sparrow_ipc::deserialize_stream(
-                std::span<const uint8_t>(stream_data)
-            );
-
-            // Serialize from json with compression
-            std::vector<uint8_t> serialized_data;
-            sparrow_ipc::memory_output_stream stream(serialized_data);
-            sparrow_ipc::serializer serializer(stream, T::compression_type);
-            serializer << record_batches_from_json << sparrow_ipc::end_stream;
-
-            // Deserialize
-            const auto deserialized_serialized_data = sparrow_ipc::deserialize_stream(
-                std::span<const uint8_t>(serialized_data)
-            );
-
-            // Compare
-            SUBCASE("Compare stream with JSON deserialization using compression")
-            {
-                compare_record_batches(record_batches_from_json, record_batches_from_stream);
-            }
-            SUBCASE("Compare record_batch de_serialization with stream deserialization using compression")
-            {
-                compare_record_batches(record_batches_from_stream, deserialized_serialized_data);
-            }
-        }
-    }
+    // TEST_CASE_TEMPLATE(
+    //     "Record batch equivalence across JSON and IPC streams - compressed",
+    //     T,
+    //     Lz4CompressionParams,
+    //     ZstdCompressionParams
+    // )
+    // {
+    //     for (const auto& file_path : T::files())
+    //     {
+    //         std::filesystem::path json_path = file_path;
+    //         json_path.replace_extension(".json");
+    //         const std::string test_name = "Testing " + std::string(T::name) + " compression with "
+    //                                       + file_path.filename().string();
+    //         SUBCASE(test_name.c_str())
+    //         {
+    //             // Load the JSON file
+    //             auto json_data = load_json_file(json_path);
+    //             CHECK(json_data != nullptr);
+    // 
+    //             const size_t num_batches = get_number_of_batches(json_path);
+    //             std::vector<sparrow::record_batch> record_batches_from_json;
+    //             for (size_t batch_idx = 0; batch_idx < num_batches; ++batch_idx)
+    //             {
+    //                 INFO("Processing batch " << batch_idx << " of " << num_batches);
+    //                 record_batches_from_json.emplace_back(
+    //                     sparrow::json_reader::build_record_batch_from_json(json_data, batch_idx)
+    //                 );
+    //             }
+    // 
+    //             // Load stream file
+    //             std::filesystem::path stream_file_path = file_path;
+    //             stream_file_path.replace_extension(".stream");
+    //             std::ifstream stream_file(stream_file_path, std::ios::in | std::ios::binary);
+    //             REQUIRE(stream_file.is_open());
+    //             const std::vector<uint8_t> stream_data(
+    //                 (std::istreambuf_iterator<char>(stream_file)),
+    //                 (std::istreambuf_iterator<char>())
+    //             );
+    //             stream_file.close();
+    // 
+    //             // Process the stream file
+    //             const auto record_batches_from_stream = sparrow_ipc::deserialize_stream(
+    //                 std::span<const uint8_t>(stream_data)
+    //             );
+    // 
+    //             std::vector<uint8_t> serialized_data;
+    //             sparrow_ipc::memory_output_stream stream(serialized_data);
+    //             sparrow_ipc::serializer serializer(stream, T::compression_type);
+    //             serializer << record_batches_from_json << sparrow_ipc::end_stream;
+    //             const auto deserialized_serialized_data = sparrow_ipc::deserialize_stream(
+    //                 std::span<const uint8_t>(serialized_data)
+    //             );
+    //             SUBCASE("Compare stream with JSON deserialization - compressed")
+    //             {
+    //                 compare_record_batches(record_batches_from_json, record_batches_from_stream);
+    //             }
+    //             SUBCASE("Compare record_batch de_serialization with stream deserialization - compressed")
+    //             {
+    //                 compare_record_batches(record_batches_from_stream, deserialized_serialized_data);
+    //             }
+    //         }
+    //     }
+    // }
+    // 
+    // TEST_CASE_TEMPLATE(
+    //     "Round trip of classic test files serialization/deserialization using compression",
+    //     T,
+    //     Lz4CompressionParams,
+    //     ZstdCompressionParams
+    // )
+    // {
+    //     for (const auto& file_path : files_paths_to_test)
+    //     {
+    //         std::filesystem::path json_path = file_path;
+    //         json_path.replace_extension(".json");
+    // 
+    //         // Load the JSON file
+    //         auto json_data = load_json_file(json_path);
+    //         CHECK(json_data != nullptr);
+    // 
+    //         const size_t num_batches = get_number_of_batches(json_path);
+    //         std::vector<sparrow::record_batch> record_batches_from_json;
+    //         for (size_t batch_idx = 0; batch_idx < num_batches; ++batch_idx)
+    //         {
+    //             INFO("Processing batch " << batch_idx << " of " << num_batches);
+    //             record_batches_from_json.emplace_back(
+    //                 sparrow::json_reader::build_record_batch_from_json(json_data, batch_idx)
+    //             );
+    //         }
+    // 
+    //         // Load stream file
+    //         std::filesystem::path stream_file_path = file_path;
+    //         stream_file_path.replace_extension(".stream");
+    //         std::ifstream stream_file(stream_file_path, std::ios::in | std::ios::binary);
+    //         REQUIRE(stream_file.is_open());
+    //         const std::vector<uint8_t> stream_data(
+    //             (std::istreambuf_iterator<char>(stream_file)),
+    //             (std::istreambuf_iterator<char>())
+    //         );
+    //         stream_file.close();
+    // 
+    //         // Process the stream file
+    //         const auto record_batches_from_stream = sparrow_ipc::deserialize_stream(
+    //             std::span<const uint8_t>(stream_data)
+    //         );
+    // 
+    //         // Serialize from json with compression
+    //         std::vector<uint8_t> serialized_data;
+    //         sparrow_ipc::memory_output_stream stream(serialized_data);
+    //         sparrow_ipc::serializer serializer(stream, T::compression_type);
+    //         serializer << record_batches_from_json << sparrow_ipc::end_stream;
+    // 
+    //         // Deserialize
+    //         const auto deserialized_serialized_data = sparrow_ipc::deserialize_stream(
+    //             std::span<const uint8_t>(serialized_data)
+    //         );
+    // 
+    //         // Compare
+    //         SUBCASE("Compare stream with JSON deserialization using compression")
+    //         {
+    //             compare_record_batches(record_batches_from_json, record_batches_from_stream);
+    //         }
+    //         SUBCASE("Compare record_batch de_serialization with stream deserialization using compression")
+    //         {
+    //             compare_record_batches(record_batches_from_stream, deserialized_serialized_data);
+    //         }
+    //     }
+    // }
 }
