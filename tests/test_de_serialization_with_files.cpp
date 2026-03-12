@@ -227,7 +227,7 @@ void compare_metadata(const sparrow::arrow_proxy& proxy1, const sparrow::arrow_p
     const auto& metadata2 = opt_metadata2.value();
 
     REQUIRE_EQ(metadata1.size(), metadata2.size());
-
+    // TODO get back to before ? and test
     auto to_map = [](const auto& view) {
         std::map<std::string, std::string> m;
         for (const auto& [k, v] : view)
