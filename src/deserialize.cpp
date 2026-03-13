@@ -80,9 +80,7 @@ namespace sparrow_ipc
                 metadata = to_sparrow_metadata(*field->custom_metadata());
             }
 
-            const std::string field_name = (field->name() != nullptr && field->name()->size() > 0)
-                                               ? field->name()->str()
-                                               : std::string("__dictionary__");
+            const std::string field_name = utils::get_fb_name(field, "__dictionary__", false);
 
             size_t buffer_index = 0;
             size_t node_index = 0;
@@ -225,6 +223,8 @@ namespace sparrow_ipc
                 {
                     schema = message->header_as_Schema();
                     dictionary_fields.clear();
+                    field_names.clear();
+                    fields_metadata.clear();
                     const size_t size = schema->fields() == nullptr
                                             ? 0
                                             : static_cast<size_t>(schema->fields()->size());

@@ -172,6 +172,7 @@ set(SPARROW_IPC_SRC
     ${SPARROW_IPC_SOURCE_DIR}/compression.cpp
     ${SPARROW_IPC_SOURCE_DIR}/deserialize_fixed_size_binary_array.cpp
     ${SPARROW_IPC_SOURCE_DIR}/deserialize_null_array.cpp
+    ${SPARROW_IPC_SOURCE_DIR}/deserialize_run_end_encoded_array.cpp
     ${SPARROW_IPC_SOURCE_DIR}/deserialize_union_array.cpp
     ${SPARROW_IPC_SOURCE_DIR}/deserialize_utils.cpp
     ${SPARROW_IPC_SOURCE_DIR}/deserialize.cpp

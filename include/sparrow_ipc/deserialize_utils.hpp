@@ -86,19 +86,22 @@ namespace sparrow_ipc::utils
      * @brief Safely extracts a string from a FlatBuffers object that has a name() method.
      *
      * @tparam T The type of the FlatBuffers object (e.g., org::apache::arrow::flatbuf::Field)
-     * @param obj Pointer to the FlatBuffers object (can be null)
-     * @param default_val Value to return if obj or name() is null
+     * @param obj Pointer to the FlatBuffers object (may be null)
+     * @param default_val Fallback value used if the object is null or the name is missing/empty.
+     * @param allow_empty If false, an empty name is treated as missing, and default_val is returned.
+     * If true (default), name str is returned if it exists, even if it's empty.
      * @return std::string The extracted name or the default value
      */
     template <typename T>
-    inline std::string get_fb_name(const T* obj, const std::string& default_val = "")
+    inline std::string get_fb_name(const T* obj, const std::string& default_val = "", bool allow_empty = true)
     {
-        if (!obj)
+        if (obj)
         {
-            return default_val;
+            if (const auto* name = obj->name(); name && (allow_empty || name->size() > 0))
+            {
+                return name->str();
+            }
         }
-
-        auto name = obj->name();
-        return name ? name->str() : default_val;
+        return default_val;
     }
 }
