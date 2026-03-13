@@ -1,8 +1,10 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <unordered_set>
 #include <vector>
@@ -61,6 +63,7 @@ const std::vector<std::filesystem::path> files_paths_to_test = {
     tests_resources_files_path / "generated_dictionary_unsigned",
     tests_resources_files_path / "generated_nested_dictionary",
     tests_resources_files_path / "generated_union",
+    tests_resources_files_path / "generated_extension",
 };
 
 const std::vector<std::filesystem::path> files_paths_to_test_with_lz4_compression = {
@@ -222,12 +225,22 @@ void compare_metadata(const sparrow::arrow_proxy& proxy1, const sparrow::arrow_p
 
     REQUIRE_EQ(metadata1.size(), metadata2.size());
 
-    auto it1 = metadata1.cbegin();
-    auto it2 = metadata2.cbegin();
-    for (; it1 != metadata1.cend(); ++it1, ++it2)
+    // NOTE: Arrow metadata is semantically an unordered map of key-value pairs.
+    // While the IPC format preserves the physical insertion order, different data sources
+    // (JSON parsers, native IPC streams, or other Arrow implementations)
+    // may produce or consume these pairs in varying sequences.
+    // We use std::map for comparison to verify logical equivalence independently of
+    // the physical storage order.
+    std::map<std::string, std::string> map1, map2;
+    for (const auto& [key, value] : metadata1)
     {
-        CHECK_EQ(*it1, *it2);
+        map1[std::string(key)] = std::string(value);
     }
+    for (const auto& [key, value] : metadata2)
+    {
+        map2[std::string(key)] = std::string(value);
+    }
+    CHECK_EQ(map1, map2);
 }
 
 void compare_raw_buffers(const sparrow::arrow_proxy& proxy1, const sparrow::arrow_proxy& proxy2)
