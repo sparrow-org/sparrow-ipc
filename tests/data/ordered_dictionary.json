@@ -1,0 +1,53 @@
+{
+  "schema": {
+    "fields": [
+      {
+        "name": "ordered_dict",
+        "type": {
+          "name": "utf8"
+        },
+        "nullable": true,
+        "children": [],
+        "dictionary": {
+          "id": 0,
+          "indexType": {
+            "name": "int",
+            "isSigned": true,
+            "bitWidth": 8
+          },
+          "isOrdered": true
+        }
+      }
+    ]
+  },
+  "dictionaries": [
+    {
+      "id": 0,
+      "data": {
+        "count": 3,
+        "columns": [
+          {
+            "name": "DICT0",
+            "count": 3,
+            "VALIDITY": [1, 1, 1],
+            "OFFSET": [0, 1, 2, 3],
+            "DATA": ["A", "B", "C"]
+          }
+        ]
+      }
+    }
+  ],
+  "batches": [
+    {
+      "count": 4,
+      "columns": [
+        {
+          "name": "ordered_dict",
+          "count": 4,
+          "VALIDITY": [1, 1, 1, 1],
+          "DATA": [0, 1, 2, 1]
+        }
+      ]
+    }
+  ]
+}

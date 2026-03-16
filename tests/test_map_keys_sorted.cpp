@@ -1,12 +1,17 @@
+#include <fstream>
+#include <span>
 #include <string>
 #include <vector>
 
 #include <doctest/doctest.h>
+#include <nlohmann/json.hpp>
 
+#include <sparrow/layout/array_access.hpp>
 #include <sparrow/map_array.hpp>
 #include <sparrow/primitive_array.hpp>
 #include <sparrow/record_batch.hpp>
 #include <sparrow/variable_size_binary_array.hpp>
+#include <sparrow/json_reader/json_parser.hpp>
 
 #include "sparrow_ipc/deserialize.hpp"
 #include "sparrow_ipc/memory_output_stream.hpp"
@@ -18,6 +23,32 @@ namespace sparrow_ipc
 
     TEST_SUITE("map array")
     {
+        TEST_CASE("Sorted map from JSON round-trip")
+        {
+            const std::filesystem::path json_path = std::filesystem::path(__FILE__).parent_path() / "data" / "map_array_sorted.json";
+            std::ifstream json_file(json_path);
+            REQUIRE(json_file.is_open());
+
+            const nlohmann::json json_data = nlohmann::json::parse(json_file);
+            json_file.close();
+
+            const sp::record_batch rb = sp::json_reader::build_record_batch_from_json(json_data, 0);
+
+            std::vector<uint8_t> buffer;
+            memory_output_stream out_stream(buffer);
+            serializer ser(out_stream);
+            ser << rb << end_stream;
+
+            const auto rb_des_vec = deserialize_stream(std::span<const uint8_t>(buffer));
+            REQUIRE(!rb_des_vec.empty());
+            auto& rb_des = rb_des_vec[0];
+
+            const auto& col_des = rb_des.get_column("map_nullable");
+            const auto& proxy_des = sp::detail::array_access::get_arrow_proxy(col_des);
+
+            CHECK(proxy_des.flags().contains(sp::ArrowFlag::MAP_KEYS_SORTED));
+        }
+
         TEST_CASE("Sorted map")
         {
             // Sorted keys

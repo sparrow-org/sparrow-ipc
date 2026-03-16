@@ -87,6 +87,11 @@ if(WIN32)
     )
 endif()
 
+target_compile_definitions(${test_target}
+    PRIVATE
+        SPARROW_IPC_TESTS_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
+)
+
 target_include_directories(${test_target}
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
