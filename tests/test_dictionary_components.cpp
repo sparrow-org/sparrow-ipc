@@ -101,8 +101,7 @@ TEST_SUITE("dictionary_components")
         {
             const auto raw_metadata = sparrow::get_metadata_from_key_values(
                 std::vector<sparrow::metadata_pair>{
-                    {"ARROW:dictionary:id", "42"},
-                    {"ARROW:dictionary:ordered", "true"}
+                    {"ARROW:dictionary:id", "42"}
                 }
             );
 
@@ -112,6 +111,17 @@ TEST_SUITE("dictionary_components")
             const auto metadata = sparrow_ipc::parse_dictionary_metadata(schema);
             REQUIRE(metadata.id.has_value());
             CHECK_EQ(*metadata.id, int64_t{42});
+            CHECK_FALSE(metadata.is_ordered);
+        }
+
+        SUBCASE("with dictionary ordered flag")
+        {
+            ArrowSchema schema{};
+            schema.flags = static_cast<int64_t>(sparrow::ArrowFlag::DICTIONARY_ORDERED);
+            schema.metadata = nullptr;
+
+            const auto metadata = sparrow_ipc::parse_dictionary_metadata(schema);
+            CHECK_FALSE(metadata.id.has_value());
             CHECK(metadata.is_ordered);
         }
     }

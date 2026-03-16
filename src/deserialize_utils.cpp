@@ -67,7 +67,13 @@ namespace sparrow_ipc::utils
                 flags.insert(sparrow::ArrowFlag::MAP_KEYS_SORTED);
             }
         }
-        // TODO DICTIONARY_ORDERED not handled yet
+        if (const auto* dictionary = field.dictionary())
+        {
+            if (dictionary && dictionary->isOrdered())
+            {
+                flags.insert(sparrow::ArrowFlag::DICTIONARY_ORDERED);
+            }
+        }
         return flags.empty() ? std::nullopt : std::make_optional(std::move(flags));
     }
 }

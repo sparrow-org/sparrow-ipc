@@ -18,6 +18,7 @@ set(SPARROW_IPC_TESTS_SRC
     test_deserializer.cpp
     test_deserialize_utils.cpp
     test_dictionary_components.cpp
+    test_dictionary_ordered.cpp
     test_dictionary.cpp
     test_map_keys_sorted.cpp
     test_memory_output_streams.cpp

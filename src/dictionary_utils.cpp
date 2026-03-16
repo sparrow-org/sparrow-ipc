@@ -25,6 +25,7 @@ namespace sparrow_ipc
     dictionary_metadata parse_dictionary_metadata(const ArrowSchema& schema)
     {
         dictionary_metadata metadata;
+        metadata.is_ordered = (schema.flags & static_cast<int64_t>(sparrow::ArrowFlag::DICTIONARY_ORDERED)) != 0;
 
         if (schema.metadata == nullptr)
         {
@@ -34,7 +35,7 @@ namespace sparrow_ipc
         const auto metadata_view = sparrow::key_value_view(schema.metadata);
         for (const auto& [key, value] : metadata_view)
         {
-            if (key == "ARROW:dictionary:id")
+            if (key == "ARROW:dictionary:id") // TODO check if this is from spec?
             {
                 try
                 {
@@ -47,10 +48,6 @@ namespace sparrow_ipc
                         + "': " + e.what()
                     );
                 }
-            }
-            else if (key == "ARROW:dictionary:ordered")
-            {
-                metadata.is_ordered = (value == "true" || value == "1");
             }
         }
 
