@@ -294,6 +294,19 @@ void compare_layouts(
     {
         compare_layouts(children1[i], children2[i]);
     }
+
+    // Recursively compare dictionary if present
+    const auto opt_dict1 = arr1.dictionary();
+    const auto opt_dict2 = arr2.dictionary();
+    if (opt_dict1.has_value())
+    {
+        REQUIRE(opt_dict2.has_value());
+        compare_layouts(opt_dict1.value(), opt_dict2.value());
+    }
+    else
+    {
+        CHECK_FALSE(opt_dict2.has_value());
+    }
 }
 
 void compare_record_batches(
@@ -321,6 +334,25 @@ void compare_record_batches(
                 const auto& column_1_value = column_1[z];
                 const auto& column_2_value = column_2[z];
                 CHECK_EQ(column_1_value, column_2_value);
+            }
+
+            // Explicitly compare dictionary values if present
+            // The row-by-row loop above only checks dictionary values that are actually
+            // referenced by indices in the current batch. This recursive call ensures
+            // that every single value in the dictionary source is semantically identical,
+            // including entries that might not be used in this specific record batch.
+            const auto opt_dict1 = column_1.dictionary();
+            const auto opt_dict2 = column_2.dictionary();
+            if (opt_dict1.has_value())
+            {
+                REQUIRE(opt_dict2.has_value());
+                const std::vector<sparrow::record_batch> dict_rb1 = {sparrow::record_batch({{"dict", opt_dict1.value()}})};
+                const std::vector<sparrow::record_batch> dict_rb2 = {sparrow::record_batch({{"dict", opt_dict2.value()}})};
+                compare_record_batches(dict_rb1, dict_rb2);
+            }
+            else
+            {
+                CHECK_FALSE(opt_dict2.has_value());
             }
 
             // Additional check for buffer layout for view data types
