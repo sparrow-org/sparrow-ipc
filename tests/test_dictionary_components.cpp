@@ -14,7 +14,7 @@
 #include "sparrow_ipc/magic_values.hpp"
 #include "sparrow_ipc/memory_output_stream.hpp"
 #include "sparrow_ipc/serialize.hpp"
-#include "test_helper.hpp"
+#include "test_utils.hpp"
 
 namespace
 {
@@ -237,9 +237,9 @@ TEST_SUITE("dictionary_components")
 
     TEST_CASE("dictionary_tracker extracts and tracks emitted dictionaries")
     {
-        std::filesystem::path stream_file = dictionary_fixture_base;
+        std::filesystem::path stream_file = sparrow_ipc::test_utils::dictionary_fixture_base;
         stream_file.replace_extension(".stream");
-        const auto stream_data = read_binary_file(stream_file);
+        const auto stream_data = sparrow_ipc::test_utils::read_binary_file(stream_file);
         const auto batches = sparrow_ipc::deserialize_stream(std::span<const uint8_t>(stream_data));
 
         REQUIRE_FALSE(batches.empty());

@@ -5,7 +5,7 @@ set(test_target "test_sparrow_ipc_lib")
 set(SPARROW_IPC_TESTS_SRC
     include/metadata_sample.hpp
     include/sparrow_ipc_tests_helpers.hpp
-    include/test_helper.hpp
+    include/test_utils.hpp
     main.cpp
     $<$<NOT:$<BOOL:${SPARROW_IPC_BUILD_SHARED}>>:test_flatbuffer_utils.cpp>
     test_any_output_stream.cpp

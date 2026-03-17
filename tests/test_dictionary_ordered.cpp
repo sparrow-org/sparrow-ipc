@@ -16,6 +16,8 @@
 #include "sparrow_ipc/memory_output_stream.hpp"
 #include "sparrow_ipc/serializer.hpp"
 
+#include "test_utils.hpp"
+
 namespace sparrow_ipc
 {
     namespace sp = sparrow;
@@ -25,12 +27,10 @@ namespace sparrow_ipc
         TEST_CASE("Dictionary ordered from JSON round-trip")
         {
             const std::filesystem::path json_path = std::filesystem::path(SPARROW_IPC_TESTS_DATA_DIR) / "ordered_dictionary.json";
-            std::ifstream json_file(json_path);
-            REQUIRE(json_file.is_open());
 
-            //TODO move load_json_file to helpers and use it instead, other helpers?
-            const nlohmann::json json_data = nlohmann::json::parse(json_file);
-            json_file.close();
+            // Load the JSON file
+            auto json_data = test_utils::load_json_file(json_path);
+            CHECK(json_data != nullptr);
 
             const sp::record_batch rb = sp::json_reader::build_record_batch_from_json(json_data, 0);
 

@@ -1,5 +1,5 @@
 #include "doctest/doctest.h"
-#include "test_helper.hpp"
+#include "test_utils.hpp"
 
 #include <sparrow/dictionary_encoded_array.hpp>
 #include <sparrow/variable_size_binary_array.hpp>
@@ -17,9 +17,9 @@ TEST_SUITE("Dictionary support")
 {
     TEST_CASE("Deserializes dictionary fixture stream")
     {
-        std::filesystem::path stream_file = dictionary_fixture_base;
+        std::filesystem::path stream_file = sparrow_ipc::test_utils::dictionary_fixture_base;
         stream_file.replace_extension(".stream");
-        const auto stream_data = read_binary_file(stream_file);
+        const auto stream_data = sparrow_ipc::test_utils::read_binary_file(stream_file);
 
         const auto batches = sparrow_ipc::deserialize_stream(std::span<const uint8_t>(stream_data));
 
@@ -30,9 +30,9 @@ TEST_SUITE("Dictionary support")
 
     TEST_CASE("Dictionary stream round-trip preserves values")
     {
-        std::filesystem::path stream_file = dictionary_fixture_base;
+        std::filesystem::path stream_file = sparrow_ipc::test_utils::dictionary_fixture_base;
         stream_file.replace_extension(".stream");
-        const auto stream_data = read_binary_file(stream_file);
+        const auto stream_data = sparrow_ipc::test_utils::read_binary_file(stream_file);
 
         const auto input_batches = sparrow_ipc::deserialize_stream(std::span<const uint8_t>(stream_data));
 
@@ -68,9 +68,9 @@ TEST_SUITE("Dictionary support")
 
     TEST_CASE("File footer contains dictionary blocks")
     {
-        std::filesystem::path stream_file = dictionary_fixture_base;
+        std::filesystem::path stream_file = sparrow_ipc::test_utils::dictionary_fixture_base;
         stream_file.replace_extension(".stream");
-        const auto stream_data = read_binary_file(stream_file);
+        const auto stream_data = sparrow_ipc::test_utils::read_binary_file(stream_file);
 
         const auto batches = sparrow_ipc::deserialize_stream(std::span<const uint8_t>(stream_data));
 
