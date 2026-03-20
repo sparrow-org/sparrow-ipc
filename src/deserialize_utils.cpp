@@ -11,11 +11,15 @@ namespace sparrow_ipc::utils
         const int64_t length
     )
     {
-        if (validity_buffer_span.empty())
+        if (validity_buffer_span.empty() || length <= 0)
         {
             return {nullptr, 0};
         }
         auto ptr = const_cast<uint8_t*>(validity_buffer_span.data());
+        if (ptr == nullptr)
+        {
+            return {nullptr, 0};
+        }
         const sparrow::dynamic_bitset_view<const std::uint8_t> bitmap_view{
             ptr,
             static_cast<size_t>(length)

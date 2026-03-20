@@ -111,6 +111,39 @@ namespace sparrow_ipc
         }
 
         /**
+         * @brief Constructs a stream_file_serializer object with a reference to a stream and a schema.
+         *
+         * This constructor allows establishing the schema for the file immediately, which is
+         * useful when the number of record batches is zero or when the schema is known upfront.
+         *
+         * @tparam TStream The type of the stream to be used for serialization.
+         * @param stream Reference to the stream object that will be used for serialization operations.
+         * @param schema_batch A record batch containing the schema for the file. The data in this
+         *                     batch is NOT written to the file; only its schema is used.
+         * @param compression Optional compression type to apply to record batch bodies.
+         */
+        template <writable_stream TStream>
+        stream_file_serializer(
+            TStream& stream,
+            const sparrow::record_batch& schema_batch,
+            std::optional<CompressionType> compression = std::nullopt
+        )
+            : m_stream(stream)
+            , m_compression(compression)
+        {
+            // Write file header magic
+            m_stream.write(arrow_file_header_magic);
+            m_stream.add_padding();
+            m_header_written = true;
+
+            // Establish schema
+            m_schema_received = true;
+            m_first_record_batch = schema_batch;
+            m_dtypes = get_column_dtypes(schema_batch);
+            serialize_schema_message(schema_batch, m_stream);
+        }
+
+        /**
          * @brief Destructor for the stream_file_serializer.
          *
          * Ensures proper cleanup by calling end() if the serializer has not been

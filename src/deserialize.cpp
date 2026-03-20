@@ -111,29 +111,93 @@ namespace sparrow_ipc
             arrays.emplace_back(std::move(values));
             return sparrow::record_batch(std::move(names), std::move(arrays));
         }
+
+        std::vector<sparrow::array> get_empty_arrays_from_schema(
+            const org::apache::arrow::flatbuf::Schema& schema,
+            const std::vector<std::optional<std::vector<sparrow::metadata_pair>>>& fields_metadata,
+            const dictionary_cache& dictionaries
+        )
+        {
+            const size_t num_fields = schema.fields() == nullptr ? 0 : static_cast<size_t>(schema.fields()->size());
+            if (num_fields == 0)
+            {
+                return {};
+            }
+
+            // Provide a dummy body that is non-empty so that reading offsets[0] works and is 0.
+            static const std::vector<uint8_t> dummy_body(4096, 0);
+
+            // Create a dummy record batch with 0 length and enough empty buffers/nodes
+            flatbuffers::FlatBufferBuilder builder;
+
+            // Provide many dummy nodes and buffers so that get_buffer and node increments don't fail
+            std::vector<org::apache::arrow::flatbuf::FieldNode> dummy_nodes_data(512, org::apache::arrow::flatbuf::FieldNode(0, 0));
+            auto nodes_offset = builder.CreateVectorOfStructs(dummy_nodes_data);
+
+            std::vector<org::apache::arrow::flatbuf::Buffer> dummy_buffers_data;
+            dummy_buffers_data.reserve(512);
+            for (size_t i = 0; i < 512; ++i)
+            {
+                dummy_buffers_data.emplace_back(static_cast<int64_t>(i*8), 8);
+            }
+            auto buffers_offset = builder.CreateVectorOfStructs(dummy_buffers_data);
+
+            auto record_batch_offset = org::apache::arrow::flatbuf::CreateRecordBatch(builder, 0, nodes_offset, buffers_offset);
+            builder.Finish(record_batch_offset);
+            const auto* dummy_record_batch = ::flatbuffers::GetRoot<org::apache::arrow::flatbuf::RecordBatch>(builder.GetBufferPointer());
+
+            std::vector<sparrow::array> arrays;
+            arrays.reserve(num_fields);
+
+            for (size_t i = 0; i < num_fields; ++i)
+            {
+                const auto field = schema.fields()->Get(i);
+                size_t buffer_index = 0;
+                size_t node_index = 0;
+                size_t variadic_counts_idx = 0;
+                deserialization_context context(
+                    *dummy_record_batch,
+                    dummy_body,
+                    buffer_index,
+                    node_index,
+                    variadic_counts_idx
+                );
+
+                // For schema generation, we DON'T decode dictionaries because we might not have them yet.
+                // This will return the indices array, but with the correct names and metadata.
+                bool decode_dicts = true;
+                if (field && field->dictionary() != nullptr)
+                {
+                    if (!dictionaries.get_dictionary(field->dictionary()->id()).has_value())
+                    {
+                        decode_dicts = false;
+                    }
+                }
+
+                field_descriptor field_desc(
+                    0,
+                    utils::get_fb_name(field),
+                    fields_metadata[i],
+                    utils::get_sparrow_flags(*field),
+                    decode_dicts,
+                    *field,
+                    &dictionaries
+                );
+
+                try
+                {
+                    arrays.emplace_back(array_deserializer::deserialize(context, field_desc));
+                }
+                catch (...)
+                {
+                    // Fallback to null array if something goes wrong during dummy generation
+                    arrays.emplace_back(sparrow::null_array(0));
+                }
+            }
+            return arrays;
+        }
     }
 
-    /**
-     * @brief Deserializes arrays from an Apache Arrow RecordBatch using the provided schema.
-     *
-     * This function processes each field in the schema and deserializes the corresponding
-     * data from the RecordBatch into sparrow::array objects. It handles various Arrow data
-     * types including primitive types (bool, integers, floating point), binary data, string
-     * data, fixed-size binary data, and interval types.
-     *
-     * @param record_batch The Apache Arrow FlatBuffer RecordBatch containing the serialized data
-     * @param schema The Apache Arrow FlatBuffer Schema defining the structure and types of the data
-     * @param encapsulated_message The message containing the binary data buffers
-     * @param field_metadata Metadata associated with each field in the schema
-     *
-     * @return std::vector<sparrow::array> A vector of deserialized arrays, one for each field in the schema
-     *
-     * @throws std::runtime_error If an unsupported data type, integer bit width, floating point precision,
-     *         or interval unit is encountered
-     *
-     * @note The function maintains a buffer index that is incremented as it processes each field
-     *       to correctly map data buffers to their corresponding arrays.
-     */
     std::vector<sparrow::array> get_arrays_from_record_batch(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         const org::apache::arrow::flatbuf::Schema& schema,
@@ -184,10 +248,10 @@ namespace sparrow_ipc
         return arrays;
     }
 
-    std::vector<sparrow::record_batch> deserialize_stream(std::span<const uint8_t> data)
+    record_batch_stream deserialize_stream_to_record_batches(std::span<const uint8_t> data)
     {
         const org::apache::arrow::flatbuf::Schema* schema = nullptr;
-        std::vector<sparrow::record_batch> record_batches;
+        record_batch_stream result;
         std::vector<std::string> field_names;
         std::vector<std::optional<std::vector<sparrow::metadata_pair>>> fields_metadata;
         std::unordered_map<int64_t, const org::apache::arrow::flatbuf::Field*> dictionary_fields;
@@ -223,26 +287,30 @@ namespace sparrow_ipc
                                             : static_cast<size_t>(schema->fields()->size());
                     field_names.reserve(size);
                     fields_metadata.reserve(size);
-                    if (schema->fields() == nullptr)
+                    if (schema->fields() != nullptr)
                     {
-                        break;
-                    }
-                    for (const auto field : *(schema->fields()))
-                    {
-                        field_names.emplace_back(utils::get_fb_name(field, "_unnamed_"));
-                        const ::flatbuffers::Vector<::flatbuffers::Offset<org::apache::arrow::flatbuf::KeyValue>>*
-                            fb_custom_metadata = field ? field->custom_metadata() : nullptr;
-                        std::optional<std::vector<sparrow::metadata_pair>>
-                            metadata = fb_custom_metadata == nullptr
-                                           ? std::nullopt
-                                           : std::make_optional(to_sparrow_metadata(*fb_custom_metadata));
-                        fields_metadata.push_back(std::move(metadata));
-
-                        if (field != nullptr)
+                        for (const auto field : *(schema->fields()))
                         {
-                            collect_dictionary_fields(*field, dictionary_fields);
+                            field_names.emplace_back(utils::get_fb_name(field, "_unnamed_"));
+                            const ::flatbuffers::Vector<::flatbuffers::Offset<org::apache::arrow::flatbuf::KeyValue>>*
+                                fb_custom_metadata = field ? field->custom_metadata() : nullptr;
+                            std::optional<std::vector<sparrow::metadata_pair>>
+                                metadata = fb_custom_metadata == nullptr
+                                               ? std::nullopt
+                                               : std::make_optional(to_sparrow_metadata(*fb_custom_metadata));
+                            fields_metadata.push_back(std::move(metadata));
+
+                            if (field != nullptr)
+                            {
+                                collect_dictionary_fields(*field, dictionary_fields);
+                            }
                         }
                     }
+
+                    // Populate result.schema immediately
+                    auto empty_arrays = get_empty_arrays_from_schema(*schema, fields_metadata, dictionaries);
+                    auto names_copy = field_names;
+                    result.schema = sparrow::record_batch(std::move(names_copy), std::move(empty_arrays));
                 }
                 break;
                 case org::apache::arrow::flatbuf::MessageHeader::RecordBatch:
@@ -265,7 +333,10 @@ namespace sparrow_ipc
                     );
                     auto names_copy = field_names;
                     sparrow::record_batch sp_record_batch(std::move(names_copy), std::move(arrays));
-                    record_batches.emplace_back(std::move(sp_record_batch));
+                    // TODO in the case of non empty record batches, we should update the schema with the right one with dict and all (first record batch?)
+                    // or maybe just nullopt? and make it optional instead of copying every time
+                    result.schema = sp_record_batch;
+                    result.batches.emplace_back(std::move(sp_record_batch));
                 }
                 break;
                 case org::apache::arrow::flatbuf::MessageHeader::DictionaryBatch:
@@ -304,6 +375,11 @@ namespace sparrow_ipc
             }
             data = rest;
         }
-        return record_batches;
+        return result;
+    }
+
+    std::vector<sparrow::record_batch> deserialize_stream(std::span<const uint8_t> data)
+    {
+        return deserialize_stream_to_record_batches(data).batches;
     }
 }

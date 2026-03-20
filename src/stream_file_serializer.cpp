@@ -41,7 +41,15 @@ namespace sparrow_ipc
 
         if (!m_schema_received)
         {
-            throw std::runtime_error("Cannot end file serializer without writing any record batches");
+            throw std::runtime_error("Cannot end file serializer without a schema");
+        }
+
+        // If header hasn't been written (e.g. default constructor and no record batches written), write it now
+        if (!m_header_written)
+        {
+            m_stream.write(arrow_file_header_magic);
+            m_stream.add_padding();
+            m_header_written = true;
         }
 
         // Write end-of-stream marker

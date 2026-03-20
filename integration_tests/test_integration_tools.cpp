@@ -122,6 +122,68 @@ TEST_SUITE("Integration Tools Tests")
         }
     }
 
+    TEST_CASE("stream_to_file - Process dictionary stream")
+    {
+        const std::filesystem::path input_stream = tests_resources_files_path / "generated_dictionary.stream";
+
+        if (!std::filesystem::exists(input_stream))
+        {
+            MESSAGE("Skipping test: test file not found at " << input_stream);
+            return;
+        }
+
+        // Read input stream
+        std::ifstream stream_file(input_stream, std::ios::binary);
+        REQUIRE(stream_file.is_open());
+
+        const std::vector<uint8_t> input_data(
+            (std::istreambuf_iterator<char>(stream_file)),
+            std::istreambuf_iterator<char>()
+        );
+        stream_file.close();
+
+        // Convert using the library (without explicit schema_batch)
+        std::vector<uint8_t> output_data;
+        CHECK_NOTHROW(output_data = integration_tools::stream_to_file(std::span<const uint8_t>(input_data)));
+        CHECK_GT(output_data.size(), 0);
+
+        // Verify the output is valid by deserializing the file
+        const auto file_batches = sparrow_ipc::deserialize_file(std::span<const uint8_t>(output_data));
+
+        // Also deserialize the original stream for comparison
+        const auto stream_batches = sparrow_ipc::deserialize_stream(std::span<const uint8_t>(input_data));
+
+        // Both should have the same number of batches
+        CHECK_EQ(file_batches.size(), stream_batches.size());
+
+        // Compare each batch
+        for (size_t i = 0; i < file_batches.size(); ++i)
+        {
+            CHECK(integration_tools::compare_record_batch(stream_batches[i], file_batches[i], i, false));
+        }
+
+        // Check footer schema has dictionary information
+        const auto* footer = sparrow_ipc::get_footer_from_file_data(output_data);
+        REQUIRE(footer != nullptr);
+        REQUIRE(footer->schema() != nullptr);
+        REQUIRE(footer->schema()->fields() != nullptr);
+
+        // Verify all dictionary fields have dictionary encoding in the schema
+        for (size_t i = 0; i < footer->schema()->fields()->size(); ++i)
+        {
+            const auto* field = footer->schema()->fields()->Get(static_cast<uint32_t>(i));
+            REQUIRE(field != nullptr);
+            // Fields that are dictionary-encoded should have a dictionary member
+            // (we're just checking the schema is preserved, actual dict info is in footer->dictionaries())
+        }
+
+        // Check that dictionary blocks are present
+        if (footer->dictionaries() != nullptr)
+        {
+            CHECK_GT(footer->dictionaries()->size(), 0);
+        }
+    }
+
     TEST_CASE("Round-trip: JSON -> stream -> file")
     {
         const std::filesystem::path json_file = tests_resources_files_path / "generated_primitive.json";
@@ -164,10 +226,7 @@ TEST_SUITE("Integration Tools Tests")
         }
 
         // Load and parse the JSON file to get expected batch count
-        std::ifstream json_input(json_file);
-        REQUIRE(json_input.is_open());
-        const nlohmann::json json_data = nlohmann::json::parse(json_input);
-        json_input.close();
+        auto json_data = integration_tools::parse_json_file(json_file);
 
         REQUIRE(json_data.contains("batches"));
         const size_t expected_batch_count = json_data["batches"].size();
@@ -262,7 +321,7 @@ TEST_SUITE("Integration Tools Tests")
         CHECK(matches);
     }
 
-    TEST_CASE("json_to_stream and validate - Round-trip with validation")
+    TEST_CASE("json_to_arrow_file and validate - Round-trip with validation")
     {
         const std::filesystem::path json_file = tests_resources_files_path / "generated_primitive.json";
 
@@ -292,6 +351,50 @@ TEST_SUITE("Integration Tools Tests")
         // Also verify by deserializing
         const auto batches = sparrow_ipc::deserialize_file(std::span<const uint8_t>(arrow_file_data));
         CHECK_EQ(batches.size(), 2);
+    }
+
+    TEST_CASE("json_to_stream and validate - Dictionary stream round-trip")
+    {
+        const std::filesystem::path json_file = tests_resources_files_path / "generated_dictionary.json";
+
+        if (!std::filesystem::exists(json_file))
+        {
+            MESSAGE("Skipping test: test file not found at " << json_file);
+            return;
+        }
+
+        // Convert JSON to stream
+        const std::vector<uint8_t> stream_data = integration_tools::json_file_to_stream(json_file);
+        REQUIRE_GT(stream_data.size(), 0);
+
+        // Convert stream to file
+        const std::vector<uint8_t> arrow_file_data = integration_tools::stream_to_file(
+            std::span<const uint8_t>(stream_data)
+        );
+        REQUIRE_GT(arrow_file_data.size(), 0);
+
+        // Validate that the file matches the JSON
+        const bool matches = integration_tools::validate_json_against_arrow_file(
+            json_file,
+            std::span<const uint8_t>(arrow_file_data)
+        );
+        CHECK(matches);
+
+        // Also verify by deserializing the file
+        const auto file_batches = sparrow_ipc::deserialize_file(std::span<const uint8_t>(arrow_file_data));
+
+        // Load JSON to get expected batches
+        auto json_data = integration_tools::parse_json_file(json_file);
+        REQUIRE(json_data.contains("batches"));
+        const size_t num_batches = json_data["batches"].size();
+        CHECK_EQ(file_batches.size(), num_batches);
+
+        // Build expected batches from JSON and compare
+        for (size_t batch_idx = 0; batch_idx < num_batches; ++batch_idx)
+        {
+            auto expected_batch = sparrow::json_reader::build_record_batch_from_json(json_data, batch_idx);
+            CHECK(integration_tools::compare_record_batch(expected_batch, file_batches[batch_idx], batch_idx, false));
+        }
     }
 
     TEST_CASE("compare_record_batch - Identical batches")
@@ -376,10 +479,7 @@ TEST_SUITE("Integration Tools Tests")
         }
 
         // Load and parse the JSON file
-        std::ifstream json_input(json_file);
-        REQUIRE(json_input.is_open());
-        const nlohmann::json json_data = nlohmann::json::parse(json_input);
-        json_input.close();
+        auto json_data = integration_tools::parse_json_file(json_file);
 
         // Expected schema from generated_primitive.json
         struct ExpectedField

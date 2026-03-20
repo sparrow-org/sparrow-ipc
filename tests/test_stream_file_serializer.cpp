@@ -247,14 +247,43 @@ TEST_SUITE("Stream file serializer tests")
         CHECK_EQ(deserialized[0].nb_rows(), 5);
     }
 
-    TEST_CASE("Error: explicit end without writing batches")
+    TEST_CASE("File serialization with schema only (zero batches)")
+    {
+        std::vector<std::string> names = {"int_col", "float_col"};
+        std::vector<int32_t> int_data = {};
+        sparrow::primitive_array<int32_t> int_array(std::move(int_data));
+        std::vector<float> float_data = {};
+        sparrow::primitive_array<float> float_array(std::move(float_data));
+        std::vector<sparrow::array> arrays;
+        arrays.emplace_back(std::move(int_array));
+        arrays.emplace_back(std::move(float_array));
+        sparrow::record_batch schema_batch(names, std::move(arrays));
+
+        std::vector<uint8_t> file_data;
+        sparrow_ipc::memory_output_stream mem_stream(file_data);
+
+        {
+            sparrow_ipc::stream_file_serializer serializer(mem_stream, schema_batch);
+            serializer.end();
+        }
+
+        // Verify file structure
+        REQUIRE(file_data.size() >= 18);
+        CHECK_EQ(file_data[0], 'A');
+
+        // Deserialize and verify
+        auto deserialized = sparrow_ipc::deserialize_file(std::span<const uint8_t>(file_data));
+        CHECK_EQ(deserialized.size(), 0);
+    }
+
+    TEST_CASE("Error: explicit end without schema")
     {
         std::vector<uint8_t> file_data;
         sparrow_ipc::memory_output_stream mem_stream(file_data);
         
-        // Explicitly calling end() without writing batches should throw
+        // Explicitly calling end() without schema should throw
         sparrow_ipc::stream_file_serializer serializer(mem_stream);
-        CHECK_THROWS_AS(serializer.end(), std::runtime_error);
+        CHECK_THROWS_WITH_AS(serializer.end(), "Cannot end file serializer without a schema", std::runtime_error);
     }
 
     TEST_CASE("Error: write after end")
@@ -268,11 +297,11 @@ TEST_SUITE("Stream file serializer tests")
 
         std::vector<uint8_t> file_data;
         sparrow_ipc::memory_output_stream mem_stream(file_data);
-        
+
         sparrow_ipc::stream_file_serializer serializer(mem_stream);
         serializer << batch;
         serializer.end();
-        
+
         CHECK_THROWS_AS(serializer.write(batch), std::runtime_error);
     }
 

@@ -18,13 +18,7 @@
 
 namespace integration_tools
 {
-    std::vector<uint8_t> json_file_to_arrow_file(const std::filesystem::path& json_path)
-    {
-        const std::vector<uint8_t> stream_data = json_file_to_stream(json_path);
-        return stream_to_file(std::span<const uint8_t>(stream_data));
-    }
-
-    std::vector<uint8_t> json_file_to_stream(const std::filesystem::path& json_path)
+    nlohmann::json parse_json_file(const std::filesystem::path& json_path)
     {
         if (!std::filesystem::exists(json_path))
         {
@@ -48,6 +42,24 @@ namespace integration_tools
         }
         json_file.close();
 
+        return json_data;
+    }
+
+    std::vector<uint8_t> json_file_to_arrow_file(const std::filesystem::path& json_path)
+    {
+        auto json_data = parse_json_file(json_path);
+        // Build a record batch with zero length to get the schema, which is
+        // useful for cases with zero record batches in the "batches" array.
+        const auto schema_batch = sparrow::json_reader::build_record_batch_from_json(json_data, 0);
+
+        const std::vector<uint8_t> stream_data = json_to_stream(json_data);
+        return stream_to_file(std::span<const uint8_t>(stream_data), schema_batch);
+    }
+
+    std::vector<uint8_t> json_file_to_stream(const std::filesystem::path& json_path)
+    {
+        auto json_data = parse_json_file(json_path);
+
         return json_to_stream(json_data);
     }
 
@@ -63,41 +75,80 @@ namespace integration_tools
         std::vector<sparrow::record_batch> record_batches;
         record_batches.reserve(num_batches);
 
-        for (size_t batch_idx = 0; batch_idx < num_batches; ++batch_idx)
+        if (num_batches == 0)
         {
+            // If there are no batches, we still need the schema.
+            // sparrow::json_reader::build_record_batch_from_json with num_batches=0
+            // will create an empty record batch with the correct schema if "batches" is empty.
             try
             {
                 record_batches.emplace_back(
-                    sparrow::json_reader::build_record_batch_from_json(json_data, batch_idx)
+                    sparrow::json_reader::build_record_batch_from_json(json_data, 0)
                 );
             }
             catch (const std::exception& e)
             {
-                throw std::runtime_error(
-                    "Failed to build record batch " + std::to_string(batch_idx) + ": " + e.what()
-                );
+                 throw std::runtime_error("Failed to build schema from JSON: " + std::string(e.what()));
+            }
+        }
+        else
+        {
+            for (size_t batch_idx = 0; batch_idx < num_batches; ++batch_idx)
+            {
+                try
+                {
+                    record_batches.emplace_back(
+                        sparrow::json_reader::build_record_batch_from_json(json_data, batch_idx)
+                    );
+                }
+                catch (const std::exception& e)
+                {
+                    throw std::runtime_error(
+                        "Failed to build record batch " + std::to_string(batch_idx) + ": " + e.what()
+                    );
+                }
             }
         }
 
+        // TODO refactor and move around code here to avoid handling multiple  if conditions
         std::vector<uint8_t> stream_data;
         sparrow_ipc::memory_output_stream stream(stream_data);
-        sparrow_ipc::serializer serializer(stream);
-        serializer << record_batches << sparrow_ipc::end_stream;
+        sparrow_ipc::any_output_stream any_stream(stream);
+        // sparrow_ipc::serializer serializer(stream);
+
+        if (num_batches == 0)
+        {
+            // We write the empty batch to establish the schema in the stream
+            // serializer << record_batches[0] << sparrow_ipc::end_stream;
+
+            // If there are no batches, we just write the schema and end the stream.
+            // This ensures pyarrow (and others) see zero batches but know the schema
+            sparrow_ipc::serialize_schema_message(record_batches[0], any_stream);
+            stream.write(sparrow_ipc::end_of_stream);
+        }
+        else
+        {
+            sparrow_ipc::serializer serializer(stream);
+            serializer << record_batches << sparrow_ipc::end_stream;
+        }
 
         return stream_data;
     }
 
-    std::vector<uint8_t> stream_to_file(std::span<const uint8_t> input_stream_data)
+    std::vector<uint8_t> stream_to_file(
+        std::span<const uint8_t> input_stream_data,
+        std::optional<sparrow::record_batch> schema_batch
+    )
     {
         if (input_stream_data.empty())
         {
             throw std::runtime_error("Input stream data is empty");
         }
 
-        std::vector<sparrow::record_batch> record_batches;
+        sparrow_ipc::record_batch_stream stream_content;
         try
         {
-            record_batches = sparrow_ipc::deserialize_stream(input_stream_data);
+            stream_content = sparrow_ipc::deserialize_stream_to_record_batches(input_stream_data);
         }
         catch (const std::exception& e)
         {
@@ -106,8 +157,32 @@ namespace integration_tools
 
         std::vector<uint8_t> output_stream_data;
         sparrow_ipc::memory_output_stream stream(output_stream_data);
-        sparrow_ipc::stream_file_serializer serializer(stream);
-        serializer << record_batches << sparrow_ipc::end_file;
+
+        // Determine which schema to use: the one from the stream,
+        // or the explicitly provided schema_batch.
+        sparrow::record_batch final_schema_batch = schema_batch.has_value()
+                                                    ? schema_batch.value()
+                                                    : stream_content.schema;
+
+        if (final_schema_batch.nb_columns() == 0 && stream_content.schema.nb_columns() == 0)
+        {
+             // If we still have no schema and no batches, we cannot proceed for a file
+             // (unless we allow empty schema files, but Arrow usually requires fields)
+             if (stream_content.batches.empty())
+             {
+                 throw std::runtime_error("Cannot create Arrow file: no schema available and no record batches in stream.");
+             }
+             final_schema_batch = stream_content.batches[0];
+        }
+
+        sparrow_ipc::stream_file_serializer serializer(stream, final_schema_batch);
+
+        if (!stream_content.batches.empty())
+        {
+            serializer << stream_content.batches;
+        }
+
+        serializer.end();
 
         return output_stream_data;
     }
@@ -257,28 +332,7 @@ namespace integration_tools
         std::span<const uint8_t> arrow_file_data
     )
     {
-
-        if (!std::filesystem::exists(json_path))
-        {
-            throw std::runtime_error("JSON file not found: " + json_path.string());
-        }
-
-        std::ifstream json_file(json_path);
-        if (!json_file.is_open())
-        {
-            throw std::runtime_error("Could not open JSON file: " + json_path.string());
-        }
-
-        nlohmann::json json_data;
-        try
-        {
-            json_data = nlohmann::json::parse(json_file);
-        }
-        catch (const nlohmann::json::parse_error& e)
-        {
-            throw std::runtime_error("Failed to parse JSON file: " + std::string(e.what()));
-        }
-        json_file.close();
+        auto json_data = parse_json_file(json_path);
 
         if (!json_data.contains("batches") || !json_data["batches"].is_array())
         {
