@@ -46,7 +46,7 @@ jobs:
 
 
       - name: Build Docker image
-        run: docker build -t sparrow/integration-tests -f ci/docker/integration.dockerfile .
+        run: docker build -t sparrow-ipc/integration-tests -f ci/docker/integration.dockerfile .
 
       - name: Run Integration tests
         run: |
@@ -55,5 +55,5 @@ jobs:
             -e ARCHERY_INTEGRATION_EXTERNAL_LIBRARY_IPC_PRODUCER=true \
             -e ARCHERY_INTEGRATION_EXTERNAL_LIBRARY_IPC_CONSUMER=true \
             -v ${{ github.workspace }}:/workspace \
-            -w /arrow-integration sparrow/integration-tests \
+            -w /arrow-integration sparrow-ipc/integration-tests \
             "/arrow-integration/ci/scripts/integration_arrow.sh /arrow-integration /build"
