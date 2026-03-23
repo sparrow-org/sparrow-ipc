@@ -333,9 +333,12 @@ namespace sparrow_ipc
                     );
                     auto names_copy = field_names;
                     sparrow::record_batch sp_record_batch(std::move(names_copy), std::move(arrays));
-                    // TODO in the case of non empty record batches, we should update the schema with the right one with dict and all (first record batch?)
-                    // or maybe just nullopt? and make it optional instead of copying every time
-                    result.schema = sp_record_batch;
+                    if (result.batches.empty())
+                    {
+                        // TODO maybe use slice_view (cf. patches) to avoid deep copy of whole record batch?
+                        // Set schema to the first record batch if present to get the correct non dummy schema
+                        result.schema = sp_record_batch;
+                    }
                     result.batches.emplace_back(std::move(sp_record_batch));
                 }
                 break;

@@ -129,7 +129,7 @@ namespace sparrow_ipc
         return footer_size;
     }
 
-    std::vector<sparrow::record_batch> deserialize_file(std::span<const uint8_t> data)
+    record_batch_stream deserialize_file(std::span<const uint8_t> data)
     {
         // Validate minimum file size
         // Magic (8) + Footer size (4) + Magic (6) = 18 bytes minimum
@@ -172,8 +172,8 @@ namespace sparrow_ipc
         
         auto stream_data = data.subspan(stream_start, stream_length);
         
-        // Use deserialize_stream to parse the stream format data
+        // Use deserialize_stream_to_record_batches to parse the stream format data
         // This handles schema message, record batches, and end-of-stream marker
-        return deserialize_stream(stream_data);
+        return deserialize_stream_to_record_batches(stream_data);
     }
 }

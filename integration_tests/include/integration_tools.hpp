@@ -11,7 +11,14 @@
 
 namespace integration_tools
 {
-    // TODO add brief
+    /**
+     * @brief Parses a JSON file from the specified path.
+     *
+     * @param json_path The filesystem path to the input JSON file to be parsed.
+     * @return nlohmann::json The parsed JSON object.
+     *
+     * @throws std::runtime_error If the file cannot be opened or parsed.
+     */
     nlohmann::json parse_json_file(const std::filesystem::path& json_path);
 
     /**

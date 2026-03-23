@@ -21,12 +21,157 @@
 #include "sparrow_ipc/serializer.hpp"
 #include "sparrow_ipc/stream_file_serializer.hpp"
 
+namespace
+{
+    void check_file_alignment(const org::apache::arrow::flatbuf::Footer* footer)
+    {
+        REQUIRE(footer != nullptr);
+        if (footer->recordBatches() != nullptr)
+        {
+            for (size_t i = 0; i < footer->recordBatches()->size(); ++i)
+            {
+                const auto& block = *footer->recordBatches()->Get(static_cast<uint32_t>(i));
+                CHECK_EQ(block.offset() % 8, 0);
+                CHECK_EQ(block.bodyLength() % 8, 0);
+                CHECK_EQ(block.metaDataLength() % 8, 0);
+            }
+        }
+        if (footer->dictionaries() != nullptr)
+        {
+            for (size_t i = 0; i < footer->dictionaries()->size(); ++i)
+            {
+                const auto& block = *footer->dictionaries()->Get(static_cast<uint32_t>(i));
+                CHECK_EQ(block.offset() % 8, 0);
+                CHECK_EQ(block.bodyLength() % 8, 0);
+                CHECK_EQ(block.metaDataLength() % 8, 0);
+            }
+        }
+    }
+
+    void run_json_round_trip_test(const std::filesystem::path& json_path)
+    {
+        if (!std::filesystem::exists(json_path))
+        {
+            MESSAGE("Skipping test: test file not found at " << json_path);
+            return;
+        }
+
+        // Load and parse the JSON file to get expected batch count
+        auto json_data = integration_tools::parse_json_file(json_path);
+        const size_t expected_batch_count = json_data.contains("batches") ? json_data["batches"].size() : 0;
+
+        // 1. JSON -> stream
+        const std::vector<uint8_t> stream_data = integration_tools::json_file_to_stream(json_path);
+        REQUIRE_GT(stream_data.size(), 0);
+
+        // 2. stream -> file
+        const std::vector<uint8_t> file_data = integration_tools::stream_to_file(std::span<const uint8_t>(stream_data));
+        REQUIRE_GT(file_data.size(), 0);
+
+        // Verify alignment
+        const auto* footer = sparrow_ipc::get_footer_from_file_data(file_data);
+        check_file_alignment(footer);
+
+        // 3. Deserialize and verify
+        const auto stream_content = sparrow_ipc::deserialize_stream_to_record_batches(stream_data);
+        const auto file_content = sparrow_ipc::deserialize_file(file_data);
+
+        CHECK_EQ(stream_content.batches.size(), expected_batch_count);
+        CHECK_EQ(file_content.batches.size(), expected_batch_count);
+
+        // Verify schemas match (all should have columns if the JSON has fields)
+        REQUIRE(stream_content.schema.has_value());
+        REQUIRE(file_content.schema.has_value());
+        CHECK_GT(stream_content.schema->nb_columns(), 0);
+        CHECK_EQ(stream_content.schema->nb_columns(), file_content.schema->nb_columns());
+
+        // Compare batches if any
+        for (size_t i = 0; i < expected_batch_count; ++i)
+        {
+            CHECK(integration_tools::compare_record_batch(stream_content.batches[i], file_content.batches[i], i, false));
+        }
+    }
+
+    void run_file_round_trip_test(const std::filesystem::path& file_path)
+    {
+        if (!std::filesystem::exists(file_path))
+        {
+            MESSAGE("Skipping test: test file not found at " << file_path);
+            return;
+        }
+
+        // Read original file
+        std::ifstream input_file(file_path, std::ios::binary);
+        REQUIRE(input_file.is_open());
+        const std::vector<uint8_t> original_data(
+            (std::istreambuf_iterator<char>(input_file)),
+            std::istreambuf_iterator<char>()
+        );
+        input_file.close();
+
+        // 1. File -> stream
+        const std::vector<uint8_t> stream_data = integration_tools::file_to_stream(original_data);
+        REQUIRE_GT(stream_data.size(), 0);
+
+        // 2. stream -> file
+        const std::vector<uint8_t> final_file_data = integration_tools::stream_to_file(stream_data);
+        REQUIRE_GT(final_file_data.size(), 0);
+
+        // Verify alignment
+        const auto* footer = sparrow_ipc::get_footer_from_file_data(final_file_data);
+        check_file_alignment(footer);
+
+        // 3. Deserialize and compare
+        const auto original_content = sparrow_ipc::deserialize_file(original_data);
+        const auto stream_content = sparrow_ipc::deserialize_stream_to_record_batches(stream_data);
+        const auto final_content = sparrow_ipc::deserialize_file(final_file_data);
+
+        CHECK_EQ(original_content.batches.size(), stream_content.batches.size());
+        CHECK_EQ(original_content.batches.size(), final_content.batches.size());
+
+        // Verify schemas
+        REQUIRE(original_content.schema.has_value());
+        REQUIRE(final_content.schema.has_value());
+        CHECK_EQ(original_content.schema->nb_columns(), final_content.schema->nb_columns());
+        CHECK_GT(final_content.schema->nb_columns(), 0);
+
+        for (size_t i = 0; i < original_content.batches.size(); ++i)
+        {
+            CHECK(integration_tools::compare_record_batch(original_content.batches[i], final_content.batches[i], i, false));
+        }
+    }
+}
+
 TEST_SUITE("Integration Tools Tests")
 {
     // Get paths to test data
     const std::filesystem::path arrow_testing_data_dir = ARROW_TESTING_DATA_DIR;
     const std::filesystem::path tests_resources_files_path = arrow_testing_data_dir / "data" / "arrow-ipc-stream"
                                                              / "integration" / "cpp-21.0.0";
+
+    TEST_CASE("Helper function round-trips")
+    {
+        const std::vector<std::string> test_bases = {
+            "generated_primitive",
+            "generated_primitive_no_batches",
+            "generated_binary",
+            "generated_binary_no_batches",
+            "generated_primitive_zerolength",
+            "generated_dictionary"
+        };
+
+        for (const auto& base : test_bases)
+        {
+            SUBCASE((base + " JSON round-trip").c_str())
+            {
+                run_json_round_trip_test(tests_resources_files_path / (base + ".json"));
+            }
+            SUBCASE((base + " File round-trip").c_str())
+            {
+                run_file_round_trip_test(tests_resources_files_path / (base + ".arrow_file"));
+            }
+        }
+    }
 
     TEST_CASE("json_file_to_stream - Non-existent file")
     {
@@ -100,26 +245,18 @@ TEST_SUITE("Integration Tools Tests")
         // Convert using the library
         std::vector<uint8_t> output_data;
         CHECK_NOTHROW(output_data = integration_tools::stream_to_file(std::span<const uint8_t>(input_data)));
-        CHECK_GT(output_data.size(), 0);
+        REQUIRE_GT(output_data.size(), 0);
 
         // Verify the output is valid
-        const auto batches = sparrow_ipc::deserialize_file(std::span<const uint8_t>(output_data));
+        const auto stream_content = sparrow_ipc::deserialize_file(std::span<const uint8_t>(output_data));
+        const auto& batches = stream_content.batches;
         CHECK_GT(batches.size(), 0);
 
-        // Check footer
+        // Check alignment and footer
         const auto* footer = sparrow_ipc::get_footer_from_file_data(output_data);
-        REQUIRE(footer != nullptr);
+        check_file_alignment(footer);
         REQUIRE(footer->recordBatches() != nullptr);
         CHECK_EQ(footer->recordBatches()->size(), batches.size());
-
-        // Check alignment of record batch blocks
-        for (size_t i = 0; i < footer->recordBatches()->size(); ++i)
-        {
-            const auto& block = *footer->recordBatches()->Get(static_cast<uint32_t>(i));
-            CHECK_EQ(block.offset() % 8, 0);
-            CHECK_EQ(block.bodyLength() % 8, 0);
-            CHECK_EQ(block.metaDataLength() % 8, 0);
-        }
     }
 
     TEST_CASE("stream_to_file - Process dictionary stream")
@@ -145,10 +282,10 @@ TEST_SUITE("Integration Tools Tests")
         // Convert using the library (without explicit schema_batch)
         std::vector<uint8_t> output_data;
         CHECK_NOTHROW(output_data = integration_tools::stream_to_file(std::span<const uint8_t>(input_data)));
-        CHECK_GT(output_data.size(), 0);
+        REQUIRE_GT(output_data.size(), 0);
 
         // Verify the output is valid by deserializing the file
-        const auto file_batches = sparrow_ipc::deserialize_file(std::span<const uint8_t>(output_data));
+        const auto file_batches = sparrow_ipc::deserialize_file(std::span<const uint8_t>(output_data)).batches;
 
         // Also deserialize the original stream for comparison
         const auto stream_batches = sparrow_ipc::deserialize_stream(std::span<const uint8_t>(input_data));
@@ -162,9 +299,9 @@ TEST_SUITE("Integration Tools Tests")
             CHECK(integration_tools::compare_record_batch(stream_batches[i], file_batches[i], i, false));
         }
 
-        // Check footer schema has dictionary information
+        // Check alignment and footer
         const auto* footer = sparrow_ipc::get_footer_from_file_data(output_data);
-        REQUIRE(footer != nullptr);
+        check_file_alignment(footer);
         REQUIRE(footer->schema() != nullptr);
         REQUIRE(footer->schema()->fields() != nullptr);
 
@@ -184,35 +321,66 @@ TEST_SUITE("Integration Tools Tests")
         }
     }
 
-    TEST_CASE("Round-trip: JSON -> stream -> file")
+    TEST_CASE("file_to_stream - Process dictionary file")
     {
-        const std::filesystem::path json_file = tests_resources_files_path / "generated_primitive.json";
+        const std::filesystem::path input_file_path = tests_resources_files_path / "generated_dictionary.arrow_file";
 
-        if (!std::filesystem::exists(json_file))
+        if (!std::filesystem::exists(input_file_path))
         {
-            MESSAGE("Skipping test: test file not found at " << json_file);
+            MESSAGE("Skipping test: test file not found at " << input_file_path);
             return;
         }
 
-        // Step 1: JSON -> stream
-        const std::vector<uint8_t> stream_data = integration_tools::json_file_to_stream(json_file);
-        REQUIRE_GT(stream_data.size(), 0);
+        // Read input file
+        std::ifstream input_file(input_file_path, std::ios::binary);
+        REQUIRE(input_file.is_open());
 
-        // Step 2: stream -> file
-        const std::vector<uint8_t> file_data = integration_tools::stream_to_file(
-            std::span<const uint8_t>(stream_data)
+        const std::vector<uint8_t> input_data(
+            (std::istreambuf_iterator<char>(input_file)),
+            std::istreambuf_iterator<char>()
         );
-        REQUIRE_GT(file_data.size(), 0);
+        input_file.close();
 
-        // Step 3: Compare the results - both should deserialize to same data
-        const auto stream_batches = sparrow_ipc::deserialize_stream(std::span<const uint8_t>(stream_data));
-        const auto file_batches = sparrow_ipc::deserialize_file(std::span<const uint8_t>(file_data));
+        // Convert using the library
+        std::vector<uint8_t> output_stream_data;
+        CHECK_NOTHROW(output_stream_data = integration_tools::file_to_stream(std::span<const uint8_t>(input_data)));
+        CHECK_GT(output_stream_data.size(), 0);
 
-        REQUIRE_EQ(stream_batches.size(), file_batches.size());
+        // Verify the output is valid by deserializing the stream
+        const auto stream_batches = sparrow_ipc::deserialize_stream(std::span<const uint8_t>(output_stream_data));
+
+        // Also deserialize the original file for comparison
+        const auto file_batches = sparrow_ipc::deserialize_file(std::span<const uint8_t>(input_data)).batches;
+
+        // Both should have the same number of batches
+        CHECK_EQ(stream_batches.size(), file_batches.size());
+
+        // Compare each batch
         for (size_t i = 0; i < stream_batches.size(); ++i)
         {
-            CHECK(integration_tools::compare_record_batch(stream_batches[i], file_batches[i], i, false));
+            CHECK(integration_tools::compare_record_batch(file_batches[i], stream_batches[i], i, false));
         }
+
+        // Verify that the stream starts with a Schema message and it has dictionary info
+        // Skip continuation and size
+        REQUIRE(output_stream_data.size() > 8);
+        const auto* message = org::apache::arrow::flatbuf::GetMessage(output_stream_data.data() + 8);
+        REQUIRE(message != nullptr);
+        REQUIRE_EQ(message->header_type(), org::apache::arrow::flatbuf::MessageHeader::Schema);
+
+        const auto* schema = message->header_as_Schema();
+        REQUIRE(schema != nullptr);
+
+        bool found_dictionary = false;
+        for (size_t i = 0; i < schema->fields()->size(); ++i)
+        {
+            if (schema->fields()->Get(static_cast<uint32_t>(i))->dictionary() != nullptr)
+            {
+                found_dictionary = true;
+                break;
+            }
+        }
+        CHECK(found_dictionary);
     }
 
     TEST_CASE("Round-trip: JSON -> Arrow file -> Arrow stream with record batch count verification")
@@ -236,14 +404,14 @@ TEST_SUITE("Integration Tools Tests")
         const std::vector<uint8_t> arrow_file_data = integration_tools::json_file_to_arrow_file(json_file);
         REQUIRE_GT(arrow_file_data.size(), 0);
 
-        // Verify record batch count in Arrow file footer
+        // Verify record batch count in Arrow file footer and alignment
         const auto* footer = sparrow_ipc::get_footer_from_file_data(arrow_file_data);
-        REQUIRE(footer != nullptr);
+        check_file_alignment(footer);
         REQUIRE(footer->recordBatches() != nullptr);
         CHECK_EQ(footer->recordBatches()->size(), expected_batch_count);
 
         // Step 2: Deserialize Arrow file
-        const auto file_batches = sparrow_ipc::deserialize_file(std::span<const uint8_t>(arrow_file_data));
+        const auto file_batches = sparrow_ipc::deserialize_file(std::span<const uint8_t>(arrow_file_data)).batches;
         CHECK_EQ(file_batches.size(), expected_batch_count);
 
         // Step 3: Arrow file -> Arrow stream (re-serialize deserialized batches)
@@ -349,52 +517,8 @@ TEST_SUITE("Integration Tools Tests")
         CHECK(matches);
 
         // Also verify by deserializing
-        const auto batches = sparrow_ipc::deserialize_file(std::span<const uint8_t>(arrow_file_data));
+        const auto batches = sparrow_ipc::deserialize_file(std::span<const uint8_t>(arrow_file_data)).batches;
         CHECK_EQ(batches.size(), 2);
-    }
-
-    TEST_CASE("json_to_stream and validate - Dictionary stream round-trip")
-    {
-        const std::filesystem::path json_file = tests_resources_files_path / "generated_dictionary.json";
-
-        if (!std::filesystem::exists(json_file))
-        {
-            MESSAGE("Skipping test: test file not found at " << json_file);
-            return;
-        }
-
-        // Convert JSON to stream
-        const std::vector<uint8_t> stream_data = integration_tools::json_file_to_stream(json_file);
-        REQUIRE_GT(stream_data.size(), 0);
-
-        // Convert stream to file
-        const std::vector<uint8_t> arrow_file_data = integration_tools::stream_to_file(
-            std::span<const uint8_t>(stream_data)
-        );
-        REQUIRE_GT(arrow_file_data.size(), 0);
-
-        // Validate that the file matches the JSON
-        const bool matches = integration_tools::validate_json_against_arrow_file(
-            json_file,
-            std::span<const uint8_t>(arrow_file_data)
-        );
-        CHECK(matches);
-
-        // Also verify by deserializing the file
-        const auto file_batches = sparrow_ipc::deserialize_file(std::span<const uint8_t>(arrow_file_data));
-
-        // Load JSON to get expected batches
-        auto json_data = integration_tools::parse_json_file(json_file);
-        REQUIRE(json_data.contains("batches"));
-        const size_t num_batches = json_data["batches"].size();
-        CHECK_EQ(file_batches.size(), num_batches);
-
-        // Build expected batches from JSON and compare
-        for (size_t batch_idx = 0; batch_idx < num_batches; ++batch_idx)
-        {
-            auto expected_batch = sparrow::json_reader::build_record_batch_from_json(json_data, batch_idx);
-            CHECK(integration_tools::compare_record_batch(expected_batch, file_batches[batch_idx], batch_idx, false));
-        }
     }
 
     TEST_CASE("compare_record_batch - Identical batches")
@@ -419,48 +543,6 @@ TEST_SUITE("Integration Tools Tests")
         sparrow::record_batch batch2({{"col", sparrow::array(std::move(int_array2))}});
 
         CHECK_FALSE(integration_tools::compare_record_batch(batch1, batch2, 0, false));
-    }
-
-    TEST_CASE("Multiple test files")
-    {
-        // Test with multiple files from the test data directory
-        const std::vector<std::string> test_files = {
-            "generated_primitive.json",
-            "generated_binary.json",
-            "generated_primitive_zerolength.json",
-            "generated_binary_zerolength.json"
-        };
-
-        for (const auto& filename : test_files)
-        {
-            const std::filesystem::path json_file = tests_resources_files_path / filename;
-
-            if (!std::filesystem::exists(json_file))
-            {
-                MESSAGE("Skipping test file: " << filename);
-                continue;
-            }
-
-            SUBCASE(filename.c_str())
-            {
-                // Convert to stream
-                const std::vector<uint8_t> arrow_file_data = integration_tools::json_file_to_arrow_file(
-                    json_file
-                );
-                REQUIRE_GT(arrow_file_data.size(), 0);
-
-                // Validate
-                const bool matches = integration_tools::validate_json_against_arrow_file(
-                    json_file,
-                    std::span<const uint8_t>(arrow_file_data)
-                );
-                CHECK(matches);
-
-                // Verify we can deserialize
-                const auto batches = sparrow_ipc::deserialize_file(std::span<const uint8_t>(arrow_file_data));
-                CHECK_GE(batches.size(), 0);
-            }
-        }
     }
 
     TEST_CASE("Schema validation through JSON -> record_batch -> stream pipeline")
@@ -796,7 +878,7 @@ TEST_SUITE("Integration Tools Tests")
             REQUIRE_GT(file_data.size(), 0);
 
             // Deserialize the file
-            const auto batches = sparrow_ipc::deserialize_file(std::span<const uint8_t>(file_data));
+            const auto batches = sparrow_ipc::deserialize_file(std::span<const uint8_t>(file_data)).batches;
             REQUIRE_EQ(batches.size(), 2);  // generated_primitive.json has 2 batches
 
             for (size_t batch_idx = 0; batch_idx < batches.size(); ++batch_idx)

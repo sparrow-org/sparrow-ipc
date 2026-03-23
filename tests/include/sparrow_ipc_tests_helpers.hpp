@@ -71,6 +71,15 @@ namespace sparrow_ipc
         );
     }
 
+    // Helper function to create an empty record batch with the same schema as create_test_record_batch
+    inline sp::record_batch create_empty_test_record_batch()
+    {
+        return sp::record_batch(
+            {{"int_col", sp::array(sp::primitive_array<int32_t>({}))},
+             {"string_col", sp::array(sp::string_array(std::vector<std::string>{}))}}
+        );
+    }
+
     // Helper function to create a compressible record batch for testing
     inline sp::record_batch create_compressible_test_record_batch()
     {

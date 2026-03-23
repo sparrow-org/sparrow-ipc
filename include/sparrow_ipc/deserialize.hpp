@@ -11,18 +11,18 @@
 namespace sparrow_ipc
 {
     /**
-     * @brief Result of stream deserialization containing schema and record batches.
+     * @brief Result of stream deserialization containing optional schema and record batches.
      */
     struct record_batch_stream
     {
-        sparrow::record_batch schema;
+        std::optional<sparrow::record_batch> schema;
         std::vector<sparrow::record_batch> batches;
     };
 
     /**
      * @brief Deserializes an Arrow IPC stream into a record_batch_stream.
      *
-     * This function returns both the schema (as an empty record batch) and the
+     * This function returns both the schema (as an optional record batch) and the
      * record batches found in the stream.
      *
      * @param data A span of bytes containing the serialized Arrow IPC stream data

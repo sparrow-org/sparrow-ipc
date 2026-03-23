@@ -18,7 +18,7 @@ namespace sparrow_ipc
         using buffer_type = std::vector<uint8_t>;
         buffer_type buffer;
         memory_output_stream<buffer_type> stream{buffer};
-        
+
         auto& get_stream() { return stream; }
         size_t size() const { return buffer.size(); }
     };
@@ -26,13 +26,40 @@ namespace sparrow_ipc
     struct ostringstream_wrapper
     {
         std::ostringstream oss;
-        
+
         auto& get_stream() { return oss; }
         size_t size() { return static_cast<size_t>(oss.tellp()); }
     };
 
     TEST_SUITE("serializer")
     {
+        TEST_CASE_TEMPLATE("construction with schema", StreamWrapper, memory_stream_wrapper, ostringstream_wrapper)
+        {
+            auto schema_rb = create_empty_test_record_batch();
+            auto data_rb = create_test_record_batch();
+            StreamWrapper wrapper;
+
+            SUBCASE("Construction with schema writes schema immediately")
+            {
+                // Initializing with an empty record batch should still write the schema
+                serializer ser(wrapper.get_stream(), schema_rb);
+                CHECK_GT(wrapper.size(), 0);
+
+                size_t size_after_init = wrapper.size();
+                ser.write(data_rb);
+                CHECK_GT(wrapper.size(), size_after_init);
+            }
+
+            SUBCASE("Construction with schema allows zero record batches")
+            {
+                {
+                    serializer ser(wrapper.get_stream(), schema_rb);
+                    ser.end();
+                }
+                CHECK_GT(wrapper.size(), 0);
+            }
+        }
+
         TEST_CASE_TEMPLATE("construction and write single record batch", StreamWrapper, memory_stream_wrapper, ostringstream_wrapper)
         {
             SUBCASE("Valid record batch, with and without compression")
