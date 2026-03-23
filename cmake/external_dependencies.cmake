@@ -74,8 +74,8 @@ endif()
 
 find_package_or_fetch(
     PACKAGE_NAME sparrow
-    GIT_REPOSITORY https://github.com/Hind-M/sparrow.git
-    TAG fix_metadata
+    GIT_REPOSITORY https://github.com/man-group/sparrow.git
+    TAG 2.3.1
 )
 
 unset(CREATE_JSON_READER_TARGET)
