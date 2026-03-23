@@ -198,6 +198,28 @@ namespace sparrow_ipc
         }
     }
 
+    /**
+     * @brief Deserializes arrays from an Apache Arrow RecordBatch using the provided schema and dictionary cache.
+     *
+     * This function processes each field in the schema and deserializes the corresponding
+     * data from the RecordBatch into sparrow::array objects. It handles various Arrow data
+     * types including primitive types (bool, integers, floating point), binary data, string
+     * data, fixed-size binary data, interval types, and dictionary-encoded types.
+     *
+     * @param record_batch The Apache Arrow FlatBuffer RecordBatch containing the serialized data.
+     * @param schema The Apache Arrow FlatBuffer Schema defining the structure and types of the data.
+     * @param encapsulated_message The message containing the binary data buffers.
+     * @param field_metadata Metadata associated with each field in the schema.
+     * @param dictionaries The cache containing pre-deserialized dictionary arrays.
+     *
+     * @return std::vector<sparrow::array> A vector of deserialized arrays, one for each field in the schema
+     *
+     * @throws std::runtime_error If an unsupported data type, integer bit width, floating point precision,
+     *         or interval unit is encountered
+     *
+     * @note The function maintains a buffer index that is incremented as it processes each field
+     *       to correctly map data buffers to their corresponding arrays.
+     */
     std::vector<sparrow::array> get_arrays_from_record_batch(
         const org::apache::arrow::flatbuf::RecordBatch& record_batch,
         const org::apache::arrow::flatbuf::Schema& schema,
