@@ -9,8 +9,6 @@
 #include "sparrow_ipc/any_output_stream.hpp"
 #include "sparrow_ipc/compression.hpp"
 #include "sparrow_ipc/config/config.hpp"
-// TODO not include this and move decl deserialize_file using record_batch_stream to somewhere more relevant
-#include "sparrow_ipc/deserialize.hpp"
 #include "sparrow_ipc/dictionary_iteration.hpp"
 #include "sparrow_ipc/dictionary_tracker.hpp"
 #include "sparrow_ipc/magic_values.hpp"
@@ -46,31 +44,6 @@ namespace sparrow_ipc
         const std::vector<record_batch_block>& record_batch_blocks,
         any_output_stream& stream
     );
-
-    // TODO move this to some deserializer file
-    /**
-     * @brief Deserializes Arrow IPC file format into a record_batch_stream.
-     *
-     * Reads an Arrow IPC file format which consists of:
-     * 1. Magic bytes "ARROW1" with padding (8 bytes)
-     * 2. Stream format data (schema + record batches)
-     * 3. Footer containing metadata
-     * 4. Footer size (int32)
-     * 5. Trailing magic bytes "ARROW1" (6 bytes)
-     *
-     * @param data A span of bytes containing the serialized Arrow IPC file data
-     *
-     * @return record_batch_stream Containing schema and batches
-     *
-     * @throws std::runtime_error If:
-     *         - The file magic bytes are incorrect
-     *         - The footer is missing or invalid
-     *         - Record batch deserialization fails
-     *
-     * @note The function validates the file structure including magic bytes at both start and end
-     */
-    [[nodiscard]] SPARROW_IPC_API record_batch_stream
-    deserialize_file(std::span<const uint8_t> data);
 
     /**
      * @brief A class for serializing Apache Arrow record batches to the IPC file format.

@@ -17,7 +17,13 @@ namespace sparrow_ipc
     namespace
     {
         // End-of-stream marker size in bytes
-        constexpr size_t END_OF_STREAM_MARKER_SIZE = 8;
+        constexpr size_t end_of_stream_marker_size = 8;
+
+        // Dummy data constants for schema generation
+        constexpr size_t dummy_body_size = 4096;
+        constexpr size_t dummy_nodes_count = 512;
+        constexpr size_t dummy_buffers_count = 512;
+        constexpr size_t dummy_buffer_alignment = 8;
 
         void collect_dictionary_fields(
             const org::apache::arrow::flatbuf::Field& field,
@@ -125,20 +131,20 @@ namespace sparrow_ipc
             }
 
             // Provide a dummy body that is non-empty so that reading offsets[0] works and is 0.
-            static const std::vector<uint8_t> dummy_body(4096, 0);
+            static const std::vector<uint8_t> dummy_body(dummy_body_size, 0);
 
             // Create a dummy record batch with 0 length and enough empty buffers/nodes
             flatbuffers::FlatBufferBuilder builder;
 
             // Provide many dummy nodes and buffers so that get_buffer and node increments don't fail
-            std::vector<org::apache::arrow::flatbuf::FieldNode> dummy_nodes_data(512, org::apache::arrow::flatbuf::FieldNode(0, 0));
+            std::vector<org::apache::arrow::flatbuf::FieldNode> dummy_nodes_data(dummy_nodes_count, org::apache::arrow::flatbuf::FieldNode(0, 0));
             auto nodes_offset = builder.CreateVectorOfStructs(dummy_nodes_data);
 
             std::vector<org::apache::arrow::flatbuf::Buffer> dummy_buffers_data;
-            dummy_buffers_data.reserve(512);
-            for (size_t i = 0; i < 512; ++i)
+            dummy_buffers_data.reserve(dummy_buffers_count);
+            for (size_t i = 0; i < dummy_buffers_count; ++i)
             {
-                dummy_buffers_data.emplace_back(static_cast<int64_t>(i*8), 8);
+                dummy_buffers_data.emplace_back(static_cast<int64_t>(i * dummy_buffer_alignment), dummy_buffer_alignment);
             }
             auto buffers_offset = builder.CreateVectorOfStructs(dummy_buffers_data);
 
@@ -282,8 +288,8 @@ namespace sparrow_ipc
         while (!data.empty())
         {
             // Check for end-of-stream marker
-            if (data.size() >= END_OF_STREAM_MARKER_SIZE
-                && is_end_of_stream(data.subspan(0, END_OF_STREAM_MARKER_SIZE)))
+            if (data.size() >= end_of_stream_marker_size
+                && is_end_of_stream(data.subspan(0, end_of_stream_marker_size)))
             {
                 break;
             }
@@ -357,7 +363,7 @@ namespace sparrow_ipc
                     sparrow::record_batch sp_record_batch(std::move(names_copy), std::move(arrays));
                     if (result.batches.empty())
                     {
-                        // TODO maybe use slice_view (cf. patches) to avoid deep copy of whole record batch?
+                        // TODO maybe use slice_view to avoid deep copy of the whole record batch?
                         // Set schema to the first record batch if present to get the correct non dummy schema
                         result.schema = sp_record_batch;
                     }
@@ -406,5 +412,53 @@ namespace sparrow_ipc
     std::vector<sparrow::record_batch> deserialize_stream(std::span<const uint8_t> data)
     {
         return deserialize_stream_to_record_batches(data).batches;
+    }
+
+    record_batch_stream deserialize_file(std::span<const uint8_t> data)
+    {
+        // Validate minimum file size
+        // Magic (8) + Footer size (4) + Magic (6) = 18 bytes minimum
+        constexpr size_t min_file_size = 18;
+        if (data.size() < min_file_size)
+        {
+            throw std::runtime_error("File is too small to be a valid Arrow file");
+        }
+
+        // Check magic bytes at the beginning
+        if (!is_arrow_file_magic(data.subspan(0, arrow_file_magic_size)))
+        {
+            throw std::runtime_error("Invalid Arrow file: missing or incorrect magic bytes at start");
+        }
+
+        // Check magic bytes at the end
+        const size_t trailing_magic_offset = data.size() - arrow_file_magic_size;
+        if (!is_arrow_file_magic(data.subspan(trailing_magic_offset, arrow_file_magic_size)))
+        {
+            throw std::runtime_error("Invalid Arrow file: missing or incorrect magic bytes at end");
+        }
+
+        // Read footer size (4 bytes before the trailing magic)
+        const size_t footer_size_offset = data.size() - arrow_file_magic_size - sizeof(int32_t);
+        int32_t footer_size = 0;
+        std::memcpy(&footer_size, data.data() + footer_size_offset, sizeof(int32_t));
+
+        if (footer_size <= 0 || static_cast<size_t>(footer_size) > data.size() - min_file_size)
+        {
+            throw std::runtime_error("Invalid footer size in Arrow file");
+        }
+
+        // Calculate the end of the stream data (before footer)
+        const size_t footer_offset = footer_size_offset - footer_size;
+
+        // Extract the stream portion (from after header magic to before footer)
+        // Stream data starts after the 8-byte header magic
+        const size_t stream_start = arrow_file_header_magic.size();
+        const size_t stream_length = footer_offset - stream_start;
+
+        auto stream_data = data.subspan(stream_start, stream_length);
+
+        // Use deserialize_stream_to_record_batches to parse the stream format data
+        // This handles schema message, record batches, and end-of-stream marker
+        return deserialize_stream_to_record_batches(stream_data);
     }
 }

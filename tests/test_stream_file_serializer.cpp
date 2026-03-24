@@ -8,6 +8,7 @@
 #include <sparrow/dictionary_encoded_array.hpp>
 #include <sparrow/record_batch.hpp>
 
+#include "sparrow_ipc/deserialize.hpp"
 #include "sparrow_ipc/memory_output_stream.hpp"
 #include "sparrow_ipc/stream_file_serializer.hpp"
 #include "sparrow_ipc/magic_values.hpp"
