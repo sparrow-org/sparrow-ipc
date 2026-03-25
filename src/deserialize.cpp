@@ -97,7 +97,7 @@ namespace sparrow_ipc
             field_descriptor field_desc(
                 dict_record_batch->length(),
                 std::move(field_name),
-                std::move(metadata),
+                std::nullopt,
                 utils::get_sparrow_flags(*field),
                 false,
                 *field,
