@@ -74,12 +74,6 @@ namespace sparrow_ipc
             }
 
             const org::apache::arrow::flatbuf::Field* field = field_it->second;
-            std::optional<std::vector<sparrow::metadata_pair>> metadata;
-            if (field->custom_metadata() != nullptr)
-            {
-                metadata = to_sparrow_metadata(*field->custom_metadata());
-            }
-
             const std::string field_name = utils::get_fb_name(field, "__dictionary__", false);
 
             size_t buffer_index = 0;
@@ -117,7 +111,6 @@ namespace sparrow_ipc
             arrays.emplace_back(std::move(values));
             return sparrow::record_batch(std::move(names), std::move(arrays));
         }
-
     }
 
     /**
