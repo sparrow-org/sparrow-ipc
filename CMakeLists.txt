@@ -406,7 +406,7 @@ export(EXPORT ${PROJECT_NAME}-targets
     NAMESPACE sparrow-ipc::)
 
 # Install headers
-install(DIRECTORY ${SPARROW_IPC_INCLUDE_DIR}
+install(DIRECTORY ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     PATTERN ".clang-*" EXCLUDE
     PATTERN "README.md" EXCLUDE)
