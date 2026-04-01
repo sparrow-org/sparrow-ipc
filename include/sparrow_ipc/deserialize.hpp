@@ -4,12 +4,45 @@
 #include <span>
 #include <vector>
 
+#include <sparrow/buffer/buffer.hpp>
 #include <sparrow/record_batch.hpp>
 
 #include "sparrow_ipc/config/config.hpp"
 
 namespace sparrow_ipc
 {
+    [[nodiscard]] inline sparrow::buffer<uint8_t> make_zeroed_buffer(std::size_t size)
+    {
+        return sparrow::buffer<uint8_t>(size, uint8_t{0}, sparrow::buffer<uint8_t>::default_allocator{});
+    }
+
+    template <class T>
+    [[nodiscard]] sparrow::buffer<uint8_t> make_typed_zeroed_buffer(std::size_t count)
+    {
+        return make_zeroed_buffer(count * sizeof(T));
+    }
+
+    template <class T>
+    [[nodiscard]] sparrow::buffer<uint8_t> make_zero_offset_buffer()
+    {
+        return make_typed_zeroed_buffer<T>(1);
+    }
+
+    template <typename CHILD>
+    [[nodiscard]] CHILD** make_owned_children(std::vector<CHILD>&& children)
+    {
+        if (children.empty())
+        {
+            return nullptr;
+        }
+        auto** child_ptrs = new CHILD*[children.size()];
+        for (std::size_t i = 0; i < children.size(); ++i)
+        {
+            child_ptrs[i] = new CHILD(children[i]);
+        }
+        return child_ptrs;
+    }
+
     /**
      * @brief Result of stream deserialization containing optional schema and record batches.
      */

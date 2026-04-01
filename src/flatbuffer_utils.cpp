@@ -1064,4 +1064,204 @@ namespace sparrow_ipc
 
         return org::apache::arrow::flatbuf::GetFooter(file_data.data() + footer_offset);
     }
+
+    std::string get_index_format(const org::apache::arrow::flatbuf::Int* index_type)
+    {
+        if (index_type == nullptr)
+        {
+            return "i";
+        }
+        const auto bit_width = index_type->bitWidth();
+        const bool is_signed = index_type->is_signed();
+        if (is_signed)
+        {
+            if (bit_width == 8)
+            {
+                return "c";
+            }
+            if (bit_width == 16)
+            {
+                return "s";
+            }
+            if (bit_width == 32)
+            {
+                return "i";
+            }
+            if (bit_width == 64)
+            {
+                return "l";
+            }
+        }
+        else
+        {
+            if (bit_width == 8)
+            {
+                return "C";
+            }
+            if (bit_width == 16)
+            {
+                return "S";
+            }
+            if (bit_width == 32)
+            {
+                return "I";
+            }
+            if (bit_width == 64)
+            {
+                return "L";
+            }
+        }
+        return "i";
+    }
+
+    std::string get_format(const org::apache::arrow::flatbuf::Field& field)
+    {
+        using namespace org::apache::arrow::flatbuf;
+        switch (field.type_type())
+        {
+            case Type::Null:
+                return "n";
+            case Type::Bool:
+                return "b";
+            case Type::Int:
+                return get_index_format(field.type_as_Int());
+            case Type::FloatingPoint:
+            {
+                const auto* fp_type = field.type_as_FloatingPoint();
+                switch (fp_type->precision())
+                {
+                    case Precision::HALF:
+                        return "e";
+                    case Precision::SINGLE:
+                        return "f";
+                    case Precision::DOUBLE:
+                        return "g";
+                }
+                break;
+            }
+            case Type::Binary:
+                return "z";
+            case Type::LargeBinary:
+                return "Z";
+            case Type::Utf8:
+                return "u";
+            case Type::LargeUtf8:
+                return "U";
+            case Type::BinaryView:
+                return "vz";
+            case Type::Utf8View:
+                return "vu";
+            case Type::FixedSizeBinary:
+                return "w:" + std::to_string(field.type_as_FixedSizeBinary()->byteWidth());
+            case Type::Date:
+                return field.type_as_Date()->unit() == DateUnit::DAY ? "tdD" : "tdm";
+            case Type::Time:
+            {
+                const auto* time_type = field.type_as_Time();
+                std::string format = "tt";
+                switch (time_type->unit())
+                {
+                    case TimeUnit::SECOND:
+                        format += "s";
+                        break;
+                    case TimeUnit::MILLISECOND:
+                        format += "m";
+                        break;
+                    case TimeUnit::MICROSECOND:
+                        format += "u";
+                        break;
+                    case TimeUnit::NANOSECOND:
+                        format += "n";
+                        break;
+                }
+                return format;
+            }
+            case Type::Timestamp:
+            {
+                const auto* ts_type = field.type_as_Timestamp();
+                std::string format = "ts";
+                switch (ts_type->unit())
+                {
+                    case TimeUnit::SECOND:
+                        format += "s";
+                        break;
+                    case TimeUnit::MILLISECOND:
+                        format += "m";
+                        break;
+                    case TimeUnit::MICROSECOND:
+                        format += "u";
+                        break;
+                    case TimeUnit::NANOSECOND:
+                        format += "n";
+                        break;
+                }
+                format += ":";
+                if (ts_type->timezone())
+                {
+                    format += ts_type->timezone()->str();
+                }
+                return format;
+            }
+            case Type::Interval:
+            {
+                switch (field.type_as_Interval()->unit())
+                {
+                    case IntervalUnit::YEAR_MONTH:
+                        return "tiM";
+                    case IntervalUnit::DAY_TIME:
+                        return "tiD";
+                    case IntervalUnit::MONTH_DAY_NANO:
+                        return "tin";
+                }
+                break;
+            }
+            case Type::Duration:
+            {
+                const auto* duration_type = field.type_as_Duration();
+                std::string format = "tD";
+                switch (duration_type->unit())
+                {
+                    case TimeUnit::SECOND:
+                        format += "s";
+                        break;
+                    case TimeUnit::MILLISECOND:
+                        format += "m";
+                        break;
+                    case TimeUnit::MICROSECOND:
+                        format += "u";
+                        break;
+                    case TimeUnit::NANOSECOND:
+                        format += "n";
+                        break;
+                }
+                return format;
+            }
+            case Type::Decimal:
+            {
+                const auto* decimal_type = field.type_as_Decimal();
+                return "d:" + std::to_string(decimal_type->precision()) + "," + std::to_string(decimal_type->scale());
+            }
+            case Type::List:
+                return "+l";
+            case Type::LargeList:
+                return "+L";
+            case Type::ListView:
+                return "+vl";
+            case Type::LargeListView:
+                return "+vL";
+            case Type::FixedSizeList:
+                return "+w:" + std::to_string(field.type_as_FixedSizeList()->listSize());
+            case Type::Struct_:
+                return "+s";
+            case Type::Map:
+                return "+m";
+            case Type::Union:
+                return (field.type_as_Union()->mode() == UnionMode::Dense) ? "+ud:" : "+us:";
+            case Type::RunEndEncoded:
+                return "+r";
+            default:
+                break;
+        }
+        return "n";
+    }
 }

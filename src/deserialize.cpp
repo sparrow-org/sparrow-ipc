@@ -5,10 +5,17 @@
 
 #include "array_deserializer.hpp"
 
+#include <sparrow/array.hpp>
+#include <sparrow/arrow_interface/arrow_array.hpp>
+#include <sparrow/arrow_interface/arrow_schema.hpp>
 #include <sparrow/c_interface.hpp>
+#include <sparrow/utils/mp_utils.hpp>
+#include <sparrow/utils/repeat_container.hpp>
 
+#include "sparrow_ipc/deserialize_utils.hpp"
 #include "sparrow_ipc/dictionary_cache.hpp"
 #include "sparrow_ipc/encapsulated_message.hpp"
+#include "sparrow_ipc/flatbuffer_utils.hpp"
 #include "sparrow_ipc/magic_values.hpp"
 #include "sparrow_ipc/metadata.hpp"
 
@@ -19,11 +26,177 @@ namespace sparrow_ipc
         // End-of-stream marker size in bytes
         constexpr size_t end_of_stream_marker_size = 8;
 
-        // Dummy data constants for schema generation
-        constexpr size_t dummy_body_size = 4096;
-        constexpr size_t dummy_nodes_count = 512;
-        constexpr size_t dummy_buffers_count = 512;
-        constexpr size_t dummy_buffer_alignment = 8;
+        [[nodiscard]] std::vector<sparrow::buffer<uint8_t>> make_empty_buffers(const ArrowSchema& schema)
+        {
+            switch (sparrow::format_to_data_type(schema.format))
+            {
+                case sparrow::data_type::NA:
+                case sparrow::data_type::RUN_ENCODED:
+                    return {};
+                case sparrow::data_type::BOOL:
+                case sparrow::data_type::UINT8:
+                case sparrow::data_type::INT8:
+                case sparrow::data_type::UINT16:
+                case sparrow::data_type::INT16:
+                case sparrow::data_type::UINT32:
+                case sparrow::data_type::INT32:
+                case sparrow::data_type::UINT64:
+                case sparrow::data_type::INT64:
+                case sparrow::data_type::HALF_FLOAT:
+                case sparrow::data_type::FLOAT:
+                case sparrow::data_type::DOUBLE:
+                case sparrow::data_type::DATE_DAYS:
+                case sparrow::data_type::DATE_MILLISECONDS:
+                case sparrow::data_type::TIMESTAMP_SECONDS:
+                case sparrow::data_type::TIMESTAMP_MILLISECONDS:
+                case sparrow::data_type::TIMESTAMP_MICROSECONDS:
+                case sparrow::data_type::TIMESTAMP_NANOSECONDS:
+                case sparrow::data_type::TIME_SECONDS:
+                case sparrow::data_type::TIME_MILLISECONDS:
+                case sparrow::data_type::TIME_MICROSECONDS:
+                case sparrow::data_type::TIME_NANOSECONDS:
+                case sparrow::data_type::DURATION_SECONDS:
+                case sparrow::data_type::DURATION_MILLISECONDS:
+                case sparrow::data_type::DURATION_MICROSECONDS:
+                case sparrow::data_type::DURATION_NANOSECONDS:
+                case sparrow::data_type::INTERVAL_MONTHS:
+                case sparrow::data_type::INTERVAL_DAYS_TIME:
+                case sparrow::data_type::INTERVAL_MONTHS_DAYS_NANOSECONDS:
+                case sparrow::data_type::DECIMAL32:
+                case sparrow::data_type::DECIMAL64:
+                case sparrow::data_type::DECIMAL128:
+                case sparrow::data_type::DECIMAL256:
+                case sparrow::data_type::FIXED_WIDTH_BINARY:
+                    return {make_zeroed_buffer(0), make_zeroed_buffer(0)};
+                case sparrow::data_type::FIXED_SIZED_LIST:
+                case sparrow::data_type::STRUCT:
+                    return {make_zeroed_buffer(0)};
+                case sparrow::data_type::STRING:
+                case sparrow::data_type::BINARY:
+                    return {make_zeroed_buffer(0), make_zero_offset_buffer<std::int32_t>(), make_zeroed_buffer(0)};
+                case sparrow::data_type::LIST:
+                case sparrow::data_type::MAP:
+                    return {make_zeroed_buffer(0), make_zero_offset_buffer<std::int32_t>()};
+                case sparrow::data_type::LARGE_STRING:
+                case sparrow::data_type::LARGE_BINARY:
+                    return {make_zeroed_buffer(0), make_zero_offset_buffer<std::int64_t>(), make_zeroed_buffer(0)};
+                case sparrow::data_type::LARGE_LIST:
+                    return {make_zeroed_buffer(0), make_zero_offset_buffer<std::int64_t>()};
+                case sparrow::data_type::LIST_VIEW:
+                    return {make_zeroed_buffer(0), make_typed_zeroed_buffer<std::int32_t>(0),
+                            make_typed_zeroed_buffer<std::int32_t>(0)};
+                case sparrow::data_type::LARGE_LIST_VIEW:
+                    return {make_zeroed_buffer(0), make_typed_zeroed_buffer<std::int64_t>(0),
+                            make_typed_zeroed_buffer<std::int64_t>(0)};
+                case sparrow::data_type::STRING_VIEW:
+                case sparrow::data_type::BINARY_VIEW:
+                    return {make_zeroed_buffer(0), make_zeroed_buffer(0), make_typed_zeroed_buffer<std::int64_t>(0)};
+                case sparrow::data_type::SPARSE_UNION:
+                    return {make_zeroed_buffer(0)};
+                case sparrow::data_type::DENSE_UNION:
+                    return {make_zeroed_buffer(0), make_typed_zeroed_buffer<std::int32_t>(0)};
+            }
+
+            sparrow::mpl::unreachable();
+        }
+
+        ArrowArray make_empty_arrow_array(const ArrowSchema& schema)
+        {
+            std::vector<ArrowArray> child_arrays;
+            child_arrays.reserve(static_cast<std::size_t>(schema.n_children));
+            for (int64_t i = 0; i < schema.n_children; ++i)
+            {
+                child_arrays.push_back(make_empty_arrow_array(*schema.children[i]));
+            }
+
+            ArrowArray* dictionary = nullptr;
+            if (schema.dictionary != nullptr)
+            {
+                dictionary = new ArrowArray(make_empty_arrow_array(*schema.dictionary));
+            }
+
+            const auto child_count = child_arrays.size();
+            return sparrow::make_arrow_array(
+                0,
+                0,
+                0,
+                make_empty_buffers(schema),
+                make_owned_children(std::move(child_arrays)),
+                sparrow::repeat_view<bool>(true, child_count),
+                dictionary,
+                dictionary != nullptr
+            );
+        }
+
+        ArrowSchema to_arrow_schema(
+            const org::apache::arrow::flatbuf::Field& field,
+            bool include_dictionary,
+            const std::optional<std::vector<sparrow::metadata_pair>>& metadata_override = std::nullopt
+        )
+        {
+            // For dictionary values, there is no metadata
+            const std::string name = include_dictionary ? utils::get_fb_name(&field) : "__dictionary__";
+            auto metadata = include_dictionary
+                                ? (metadata_override.has_value() ? metadata_override
+                                                                 : (field.custom_metadata()
+                                                                        ? std::make_optional(to_sparrow_metadata(*field.custom_metadata()))
+                                                                        : std::nullopt))
+                                : std::nullopt;
+
+            auto flags = utils::get_sparrow_flags(field);
+
+            if (include_dictionary && field.dictionary())
+            {
+                const auto* dict_meta = field.dictionary();
+                const std::string index_format = get_index_format(dict_meta->indexType());
+
+                // Recurse for values, but don't include dictionary again.
+                // This call will skip this if block and go to the format/children logic below,
+                // effectively putting the children into the dictionary schema.
+                ArrowSchema value_schema = to_arrow_schema(field, false);
+
+                ArrowSchema* dictionary = new ArrowSchema(std::move(value_schema));
+
+                return sparrow::make_arrow_schema(
+                    index_format,
+                    name,
+                    metadata,
+                    flags,
+                    nullptr,
+                    std::vector<bool>{},
+                    dictionary,
+                    true
+                );
+            }
+
+            const std::string format = get_format(field);
+            std::vector<ArrowSchema> child_schemas;
+            if (field.children() && field.children()->size() > 0)
+            {
+                const auto child_count = field.children()->size();
+                child_schemas.reserve(child_count);
+                for (size_t i = 0; i < child_count; ++i)
+                {
+                    const auto* child = field.children()->Get(i);
+                    if (child != nullptr)
+                    {
+                        child_schemas.push_back(to_arrow_schema(*child, true));
+                    }
+                }
+            }
+
+            const auto child_count = child_schemas.size();
+            return sparrow::make_arrow_schema(
+                format,
+                name,
+                metadata,
+                flags,
+                make_owned_children(std::move(child_schemas)),
+                sparrow::repeat_view<bool>(true, child_count),
+                nullptr,
+                false
+            );
+        }
 
         void collect_dictionary_fields(
             const org::apache::arrow::flatbuf::Field& field,
@@ -130,75 +303,29 @@ namespace sparrow_ipc
                 return {};
             }
 
-            // Provide a dummy body that is non-empty so that reading offsets[0] works and is 0.
-            static const std::vector<uint8_t> dummy_body(dummy_body_size, 0);
-
-            // Create a dummy record batch with 0 length and enough empty buffers/nodes
-            flatbuffers::FlatBufferBuilder builder;
-
-            // Provide many dummy nodes and buffers so that get_buffer and node increments don't fail
-            std::vector<org::apache::arrow::flatbuf::FieldNode> dummy_nodes_data(dummy_nodes_count, org::apache::arrow::flatbuf::FieldNode(0, 0));
-            auto nodes_offset = builder.CreateVectorOfStructs(dummy_nodes_data);
-
-            std::vector<org::apache::arrow::flatbuf::Buffer> dummy_buffers_data;
-            dummy_buffers_data.reserve(dummy_buffers_count);
-            for (size_t i = 0; i < dummy_buffers_count; ++i)
-            {
-                dummy_buffers_data.emplace_back(static_cast<int64_t>(i * dummy_buffer_alignment), dummy_buffer_alignment);
-            }
-            auto buffers_offset = builder.CreateVectorOfStructs(dummy_buffers_data);
-
-            auto record_batch_offset = org::apache::arrow::flatbuf::CreateRecordBatch(builder, 0, nodes_offset, buffers_offset);
-            builder.Finish(record_batch_offset);
-            const auto* dummy_record_batch = ::flatbuffers::GetRoot<org::apache::arrow::flatbuf::RecordBatch>(builder.GetBufferPointer());
-
             std::vector<sparrow::array> arrays;
             arrays.reserve(num_fields);
 
             for (size_t i = 0; i < num_fields; ++i)
             {
-                const auto field = schema.fields()->Get(i);
-                size_t buffer_index = 0;
-                size_t node_index = 0;
-                size_t variadic_counts_idx = 0;
-                deserialization_context context(
-                    *dummy_record_batch,
-                    dummy_body,
-                    buffer_index,
-                    node_index,
-                    variadic_counts_idx
-                );
-
-                // For schema generation, we DON'T decode dictionaries because we might not have them yet.
-                // This will return the indices array, but with the correct names and metadata.
-                bool decode_dicts = true;
-                if (field && field->dictionary() != nullptr)
+                const auto* field = schema.fields()->Get(i);
+                if (field == nullptr)
                 {
-                    if (!dictionaries.get_dictionary(field->dictionary()->id()).has_value())
+                    continue;
+                }
+
+                bool include_dictionary = false;
+                if (field->dictionary() != nullptr)
+                {
+                    if (dictionaries.get_dictionary(field->dictionary()->id()).has_value())
                     {
-                        decode_dicts = false;
+                        include_dictionary = true;
                     }
                 }
 
-                field_descriptor field_desc(
-                    0,
-                    utils::get_fb_name(field),
-                    fields_metadata[i],
-                    utils::get_sparrow_flags(*field),
-                    decode_dicts,
-                    *field,
-                    &dictionaries
-                );
-
-                try
-                {
-                    arrays.emplace_back(array_deserializer::deserialize(context, field_desc));
-                }
-                catch (...)
-                {
-                    // Fallback to null array if something goes wrong during dummy generation
-                    arrays.emplace_back(sparrow::null_array(0));
-                }
+                ArrowSchema arrow_schema = to_arrow_schema(*field, include_dictionary, fields_metadata[i]);
+                ArrowArray arrow_array = make_empty_arrow_array(arrow_schema);
+                arrays.emplace_back(std::move(arrow_array), std::move(arrow_schema));
             }
             return arrays;
         }
@@ -364,7 +491,7 @@ namespace sparrow_ipc
                     if (result.batches.empty())
                     {
                         // TODO maybe use slice_view to avoid deep copy of the whole record batch?
-                        // Set schema to the first record batch if present to get the correct non dummy schema
+                        // Set schema to the first record batch if present
                         result.schema = sp_record_batch;
                     }
                     result.batches.emplace_back(std::move(sp_record_batch));

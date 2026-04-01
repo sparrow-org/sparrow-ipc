@@ -404,4 +404,10 @@ namespace sparrow_ipc
 
     // Helper function to extract and parse the footer from Arrow IPC file data
     [[nodiscard]] SPARROW_IPC_API const org::apache::arrow::flatbuf::Footer* get_footer_from_file_data(std::span<const uint8_t> file_data);
+
+    // Get sparrow format as a string from flatbuffers field type as int
+    [[nodiscard]] SPARROW_IPC_API std::string get_index_format(const org::apache::arrow::flatbuf::Int* index_type);
+
+    // Get sparrow format as a string from flatbuffers field type
+    [[nodiscard]] SPARROW_IPC_API std::string get_format(const org::apache::arrow::flatbuf::Field& field);
 }
