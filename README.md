@@ -18,8 +18,15 @@
 
 ## Installation
 
+### Using a package manager
 
-### Install from sources
+Use your favorite package manager, `mamba`, `pixi` or `conda`, to install `sparrow-ipc` from `conda-forge`:
+
+```bash
+mamba install -c conda-forge sparrow-ipc
+```
+
+### Install from source
 
 `sparrow-ipc` has a few dependencies that you can install in a mamba environment:
 
