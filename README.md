@@ -47,7 +47,7 @@ cmake .. \
           -DSPARROW_IPC_BUILD_TESTS=ON \
           -DSPARROW_IPC_BUILD_EXAMPLES=ON
 
-make -j 4
+make
 make install
 ```
 
