@@ -11,8 +11,8 @@ dependencies:
   - lz4-c
   - zstd
   - nlohmann_json
-  - sparrow-devel >=2.3.1
-  - sparrow-json-reader >=2.3.1
+  - sparrow-devel >=2.4.0
+  - sparrow-json-reader >=2.4.0
   # Testing dependencies
   - doctest
   # Documentation dependencies
