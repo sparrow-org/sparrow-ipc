@@ -39,7 +39,7 @@ You can then create a build directory, and build the project and install it with
 
 ```bash
 mkdir build
-de build
+cd build
 cmake .. \
     -DCMAKE_BUILD_TYPE=Debug \
           -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \
@@ -47,6 +47,7 @@ cmake .. \
           -DSPARROW_IPC_BUILD_TESTS=ON \
           -DSPARROW_IPC_BUILD_EXAMPLES=ON
 
+make -j 4
 make install
 ```
 
