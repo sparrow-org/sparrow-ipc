@@ -10,8 +10,8 @@
 #include <sparrow/buffer/buffer.hpp>
 #include <sparrow/c_interface.hpp>
 
-#include "Message_generated.h"
-#include "Schema_generated.h"
+#include "sparrow_ipc/flatbuffers_generated/Message_generated.h"
+#include "sparrow_ipc/flatbuffers_generated/Schema_generated.h"
 
 namespace sparrow_ipc::utils
 {

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "Message_generated.h"
+#include "sparrow_ipc/flatbuffers_generated/Message_generated.h"
 
 #include "sparrow_ipc/compression.hpp"
 

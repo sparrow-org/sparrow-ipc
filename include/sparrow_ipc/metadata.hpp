@@ -6,7 +6,7 @@
 
 #include <sparrow/utils/metadata.hpp>
 
-#include "Schema_generated.h"
+#include "sparrow_ipc/flatbuffers_generated/Schema_generated.h"
 
 namespace sparrow_ipc
 {

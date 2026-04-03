@@ -4,7 +4,7 @@
 #include <variant>
 #include <span>
 
-#include "Message_generated.h"
+#include "sparrow_ipc/flatbuffers_generated/Message_generated.h"
 
 namespace sparrow_ipc
 {

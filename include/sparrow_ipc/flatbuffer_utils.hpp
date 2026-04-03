@@ -7,8 +7,8 @@
 #include <sparrow/c_interface.hpp>
 #include <sparrow/record_batch.hpp>
 
-#include "File_generated.h"
-#include "Message_generated.h"
+#include "sparrow_ipc/flatbuffers_generated/File_generated.h"
+#include "sparrow_ipc/flatbuffers_generated/Message_generated.h"
 
 #include "sparrow_ipc/compression.hpp"
 #include "sparrow_ipc/utils.hpp"

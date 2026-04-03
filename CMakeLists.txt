@@ -217,7 +217,8 @@ foreach(url IN LISTS SCHEMA_URLS)
 endforeach()
 
 # Generate Flatbuffers C++ headers from the schemas
-set(FLATBUFFERS_GENERATED_DIR ${CMAKE_BINARY_DIR}/generated)
+set(FLATBUFFERS_GENERATED_ROOT ${CMAKE_BINARY_DIR}/generated)
+set(FLATBUFFERS_GENERATED_DIR ${FLATBUFFERS_GENERATED_ROOT}/sparrow_ipc/flatbuffers_generated)
 file(MAKE_DIRECTORY ${FLATBUFFERS_GENERATED_DIR})
 
 # Generate output files list
@@ -250,7 +251,7 @@ add_custom_target(generate_flatbuffers_headers
 add_library(flatbuffers_interface INTERFACE)
 target_include_directories(flatbuffers_interface INTERFACE 
     $<BUILD_INTERFACE:${FLATBUFFERS_GENERATED_DIR}>
-    $<INSTALL_INTERFACE:include/flatbuffers_generated>)
+    $<INSTALL_INTERFACE:include/sparrow_ipc/flatbuffers_generated>)
 add_dependencies(flatbuffers_interface generate_flatbuffers_headers)
 
 add_library(sparrow-ipc ${SPARROW_IPC_LIBRARY_TYPE} ${SPARROW_IPC_SRC} ${SPARROW_IPC_HEADERS})
@@ -293,7 +294,8 @@ target_include_directories(sparrow-ipc
         $<BUILD_INTERFACE:${SPARROW_IPC_INCLUDE_DIR}>
         $<INSTALL_INTERFACE:include>
     PRIVATE
-        $<BUILD_INTERFACE:${FLATBUFFERS_GENERATED_DIR}>)
+        $<BUILD_INTERFACE:${FLATBUFFERS_GENERATED_ROOT}>
+    )
 
 target_link_libraries(sparrow-ipc 
     PUBLIC
@@ -406,6 +408,9 @@ export(EXPORT ${PROJECT_NAME}-targets
     FILE "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Targets.cmake"
     NAMESPACE sparrow-ipc::)
 
+# Install generated headers
+install(DIRECTORY ${FLATBUFFERS_GENERATED_ROOT}/sparrow_ipc DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
 # Install headers
 install(DIRECTORY ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
@@ -414,3 +419,4 @@ install(DIRECTORY ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc
 
 install(FILES ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+

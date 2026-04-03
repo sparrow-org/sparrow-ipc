@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-#include <File_generated.h>
+#include "sparrow_ipc/flatbuffers_generated/File_generated.h"
 
 #include <sparrow/array.hpp>
 #include <sparrow/dictionary_encoded_array.hpp>

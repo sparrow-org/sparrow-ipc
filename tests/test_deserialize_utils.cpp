@@ -1,6 +1,6 @@
 #include <doctest/doctest.h>
 
-#include "Schema_generated.h"
+#include "sparrow_ipc/flatbuffers_generated/Schema_generated.h"
 
 #include "sparrow_ipc/deserialize_utils.hpp"
 

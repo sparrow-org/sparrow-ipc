@@ -8,8 +8,8 @@
 
 #include <sparrow/c_interface.hpp>
 
-#include "Schema_generated.h"
-#include "Message_generated.h"
+#include "sparrow_ipc/flatbuffers_generated/Schema_generated.h"
+#include "sparrow_ipc/flatbuffers_generated/Message_generated.h"
 
 #include "sparrow_ipc/dictionary_cache.hpp"
 #include "sparrow_ipc/metadata.hpp"

@@ -4,10 +4,10 @@
 #include <unordered_set>
 #include <vector>
 
-#include <File_generated.h>
-#include <Message_generated.h>
+#include "sparrow_ipc/flatbuffers_generated/File_generated.h"
+#include "sparrow_ipc/flatbuffers_generated/Message_generated.h"
+#include "sparrow_ipc/flatbuffers_generated/Schema_generated.h"
 #include <nlohmann/json.hpp>
-#include <Schema_generated.h>
 
 #include <sparrow/c_interface.hpp>
 #include <sparrow/json_reader/json_parser.hpp>

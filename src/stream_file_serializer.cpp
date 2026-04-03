@@ -2,7 +2,7 @@
 
 #include <ranges>
 
-#include <File_generated.h>
+#include "sparrow_ipc/flatbuffers_generated/File_generated.h"
 
 #include "sparrow_ipc/flatbuffer_utils.hpp"
 #include "sparrow_ipc/magic_values.hpp"
