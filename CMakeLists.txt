@@ -154,6 +154,7 @@ set(SPARROW_IPC_HEADERS
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/serializer.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/stream_file_serializer.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/utils.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc.hpp
 )
 
 set(SPARROW_IPC_SRC
@@ -410,3 +411,6 @@ install(DIRECTORY ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     PATTERN ".clang-*" EXCLUDE
     PATTERN "README.md" EXCLUDE)
+
+install(FILES ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc.hpp
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
