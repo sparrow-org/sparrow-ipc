@@ -192,7 +192,7 @@ set(SPARROW_IPC_SRC
 
 
 set(FLATBUFFERS_SCHEMAS "")
-file(GLOB_RECURSE FLATBUFFERS_SCHEMAS "flatbuffer_schemas/*.fbs")
+file(GLOB_RECURSE FLATBUFFERS_SCHEMAS "flatbuffers_schemas/*.fbs")
 
 # Generate Flatbuffers C++ headers from the schemas
 set(FLATBUFFERS_GENERATED_ROOT ${CMAKE_BINARY_DIR}/generated)
