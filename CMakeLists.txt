@@ -190,31 +190,9 @@ set(SPARROW_IPC_SRC
     ${SPARROW_IPC_SOURCE_DIR}/utils.cpp
 )
 
-# Fetch schemas from apache arrow
-set(SCHEMA_DIR ${CMAKE_BINARY_DIR}/format)
-set(SCHEMA_URLS
-    "https://raw.githubusercontent.com/apache/arrow/refs/heads/main/format/File.fbs"
-    "https://raw.githubusercontent.com/apache/arrow/refs/heads/main/format/Message.fbs"
-    "https://raw.githubusercontent.com/apache/arrow/refs/heads/main/format/Schema.fbs"
-    "https://raw.githubusercontent.com/apache/arrow/refs/heads/main/format/Tensor.fbs"
-    "https://raw.githubusercontent.com/apache/arrow/refs/heads/main/format/SparseTensor.fbs"
-    # TODO what about feather.fbs?
-)
 
-file(MAKE_DIRECTORY ${SCHEMA_DIR})
-
-# Download schemas
 set(FLATBUFFERS_SCHEMAS "")
-foreach(url IN LISTS SCHEMA_URLS)
-    get_filename_component(filename ${url} NAME)
-    if(NOT EXISTS ${SCHEMA_DIR}/${filename})
-        message(STATUS "Downloading schema: ${url}")
-        file(DOWNLOAD ${url} ${SCHEMA_DIR}/${filename}
-            STATUS status)
-    endif()
-
-    list(APPEND FLATBUFFERS_SCHEMAS ${SCHEMA_DIR}/${filename})
-endforeach()
+file(GLOB_RECURSE FLATBUFFERS_SCHEMAS "flatbuffers_schemas/*.fbs")
 
 # Generate Flatbuffers C++ headers from the schemas
 set(FLATBUFFERS_GENERATED_ROOT ${CMAKE_BINARY_DIR}/generated)
