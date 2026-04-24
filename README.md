@@ -6,10 +6,6 @@
 [![GHA Docs](https://github.com/sparrow-org/sparrow-ipc/actions/workflows/docs.yaml/badge.svg)](https://github.com/sparrow-org/sparrow-ipc/actions/workflows/docs.yaml)
 [![Integration tests](https://github.com/sparrow-org/sparrow-ipc/actions/workflows/integration_tests.yaml/badge.svg?branch=main)](https://github.com/sparrow-org/sparrow-ipc/actions/workflows/integration_tests.yaml)
 
-**!!!Sparrow-IPC is still under development and is not ready for production use!!!**
-
-**!!!The documentation is still under development and may be incomplete or contain errors!!!**
-
 ## Introduction
 
 `sparrow-ipc` provides high-performance serialization and deserialization of record batches, adhering to both [sparrow](https://github.com/man-group/sparrow) and [Apache Arrow IPC specifications](https://arrow.apache.org/docs/format/Columnar.html#serialization-and-interprocess-communication-ipc).
