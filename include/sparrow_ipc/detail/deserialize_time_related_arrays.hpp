@@ -9,8 +9,8 @@
 #include <sparrow/timestamp_array.hpp>
 #include <sparrow/timestamp_without_timezone_array.hpp>
 
-#include "sparrow_ipc/deserialization_context.hpp"
-#include "sparrow_ipc/deserialize_array_impl.hpp"
+#include "sparrow_ipc/detail/deserialization_context.hpp"
+#include "sparrow_ipc/detail/deserialize_array_impl.hpp"
 
 namespace sparrow_ipc
 {

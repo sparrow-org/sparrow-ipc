@@ -22,6 +22,7 @@ set(SPARROW_IPC_TESTS_SRC
     test_dictionary.cpp
     test_map_keys_sorted.cpp
     test_memory_output_streams.cpp
+    test_no_flatbuffer_leak.cpp
     test_serialize_utils.cpp
     test_serializer.cpp
     test_stream_file_serializer.cpp

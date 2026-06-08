@@ -12,7 +12,6 @@
 #include "doctest/doctest.h"
 #include "metadata_sample.hpp"
 #include "sparrow_ipc/arrow_interface/arrow_schema.hpp"
-#include "sparrow_ipc/deserialize_primitive_array.hpp"
 
 using namespace std::string_literals;
 

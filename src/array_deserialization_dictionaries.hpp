@@ -5,7 +5,7 @@
 
 #include "sparrow_ipc/flatbuffers_generated/Schema_generated.h"
 
-#include "sparrow_ipc/deserialization_context.hpp"
+#include "sparrow_ipc/detail/deserialization_context.hpp"
 #include "sparrow_ipc/dictionary_cache.hpp"
 
 namespace sparrow_ipc

@@ -2,7 +2,7 @@
 
 #include <sparrow/null_array.hpp>
 
-#include "sparrow_ipc/deserialization_context.hpp"
+#include "sparrow_ipc/detail/deserialization_context.hpp"
 
 namespace sparrow_ipc
 {

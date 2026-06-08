@@ -1,4 +1,4 @@
-#include "sparrow_ipc/encapsulated_message.hpp"
+#include "sparrow_ipc/detail/encapsulated_message.hpp"
 
 #include <stdexcept>
 

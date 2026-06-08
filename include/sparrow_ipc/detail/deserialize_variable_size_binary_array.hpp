@@ -1,47 +1,25 @@
 #pragma once
 
-#include <cstdint>
-#include <optional>
 #include <span>
-#include <string>
-#include <string_view>
 #include <unordered_set>
-#include <vector>
 
 #include <sparrow/arrow_interface/arrow_array_schema_proxy.hpp>
+#include <sparrow/variable_size_binary_array.hpp>
 
 #include "sparrow_ipc/arrow_interface/arrow_array.hpp"
 #include "sparrow_ipc/arrow_interface/arrow_schema.hpp"
-#include "sparrow_ipc/deserialization_context.hpp"
-#include "sparrow_ipc/deserialize_utils.hpp"
+#include "sparrow_ipc/detail/deserialization_context.hpp"
+#include "sparrow_ipc/detail/deserialize_utils.hpp"
 
-namespace sparrow_ipc::detail
+namespace sparrow_ipc
 {
-    /**
-     * @brief Generic implementation for deserializing non-owning arrays with simple layout.
-     *
-     * This function provides the common deserialization logic for array types that have
-     * a validity buffer and a single data buffer (e.g., primitive_array, interval_array).
-     *
-     * @tparam ArrayType The array type template (e.g., sparrow::primitive_array)
-     * @tparam T The element type
-     *
-     * @param context The deserialization context
-     * @param field_desc The field descriptor
-     * @param format_override Optional format string to override the default
-     *
-     * @return The deserialized array of type ArrayType<T>
-     */
-    template <template<typename...> class ArrayType, typename T>
-    [[nodiscard]] ArrayType<T> deserialize_simple_array(
+    template <typename T>
+    [[nodiscard]] T deserialize_variable_size_binary_array(
         deserialization_context& context,
-        const field_descriptor& field_desc,
-        std::optional<std::string> format_override = std::nullopt
+        const field_descriptor& field_desc
     )
     {
-        const std::string_view format = format_override.has_value()
-            ? *format_override
-            : sparrow::data_type_to_format(sparrow::detail::get_data_type_from_array<ArrayType<T>>::get());
+        const std::string_view format = sparrow::data_type_to_format(sparrow::detail::get_data_type_from_array<T>::get());
         
         ArrowSchema schema = make_non_owning_arrow_schema(
             format,
@@ -55,20 +33,24 @@ namespace sparrow_ipc::detail
 
         const auto compression = context.record_batch.compression();
         std::vector<arrow_array_private_data::optionally_owned_buffer> buffers;
-        constexpr auto nb_buffers = 2;
+        constexpr auto nb_buffers = 3;
         buffers.reserve(nb_buffers);
+
         {
             auto validity_buffer_span = utils::get_buffer(context.record_batch, context.body, context.buffer_index);
+            auto offset_buffer_span = utils::get_buffer(context.record_batch, context.body, context.buffer_index);
             auto data_buffer_span = utils::get_buffer(context.record_batch, context.body, context.buffer_index);
 
             if (compression)
             {
                 buffers.push_back(utils::get_decompressed_buffer(validity_buffer_span, compression));
+                buffers.push_back(utils::get_decompressed_buffer(offset_buffer_span, compression));
                 buffers.push_back(utils::get_decompressed_buffer(data_buffer_span, compression));
             }
             else
             {
                 buffers.push_back(std::move(validity_buffer_span));
+                buffers.push_back(std::move(offset_buffer_span));
                 buffers.push_back(std::move(data_buffer_span));
             }
         }
@@ -92,6 +74,6 @@ namespace sparrow_ipc::detail
         );
 
         sparrow::arrow_proxy ap{std::move(array), std::move(schema)};
-        return ArrayType<T>{std::move(ap)};
+        return T{std::move(ap)};
     }
 }

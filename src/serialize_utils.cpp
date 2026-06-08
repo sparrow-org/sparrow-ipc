@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <stdexcept>
 
-#include "sparrow_ipc/flatbuffer_utils.hpp"
+#include "sparrow_ipc/detail/flatbuffer_utils.hpp"
 #include "sparrow_ipc/magic_values.hpp"
 #include "sparrow_ipc/serialize.hpp"
 #include "sparrow_ipc/serialize_utils.hpp"

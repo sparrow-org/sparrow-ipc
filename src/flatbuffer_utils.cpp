@@ -1,4 +1,4 @@
-#include "sparrow_ipc/flatbuffer_utils.hpp"
+#include "sparrow_ipc/detail/flatbuffer_utils.hpp"
 
 #include <functional>
 #include <string>

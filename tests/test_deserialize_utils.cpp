@@ -2,7 +2,7 @@
 
 #include "sparrow_ipc/flatbuffers_generated/Schema_generated.h"
 
-#include "sparrow_ipc/deserialize_utils.hpp"
+#include "sparrow_ipc/detail/deserialize_utils.hpp"
 
 namespace sparrow_ipc
 {

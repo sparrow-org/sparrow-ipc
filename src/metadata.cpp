@@ -1,4 +1,4 @@
-#include "sparrow_ipc/metadata.hpp"
+#include "sparrow_ipc/detail/metadata.hpp"
 
 #include <algorithm>
 

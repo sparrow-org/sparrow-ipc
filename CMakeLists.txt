@@ -123,31 +123,31 @@ set(SPARROW_IPC_HEADERS
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/compression.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/config/config.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/config/sparrow_ipc_version.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialization_context.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_array_impl.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_decimal_array.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_duration_array.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_fixed_size_binary_array.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_interval_array.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_null_array.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_primitive_array.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_run_end_encoded_array.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_time_related_arrays.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_union_array.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_utils.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_variable_size_binary_array.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize_variable_size_binary_view_array.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/deserialization_context.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/deserialize_array_impl.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/deserialize_decimal_array.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/deserialize_duration_array.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/deserialize_fixed_size_binary_array.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/deserialize_interval_array.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/deserialize_null_array.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/deserialize_primitive_array.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/deserialize_run_end_encoded_array.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/deserialize_time_related_arrays.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/deserialize_union_array.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/deserialize_utils.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/deserialize_variable_size_binary_array.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/deserialize_variable_size_binary_view_array.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserialize.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/deserializer.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/dictionary_cache.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/dictionary_iteration.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/dictionary_tracker.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/dictionary_utils.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/encapsulated_message.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/flatbuffer_utils.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/encapsulated_message.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/flatbuffer_utils.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/magic_values.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/memory_output_stream.hpp
-    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/metadata.hpp
+    ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/detail/metadata.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/serialize_utils.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/serialize.hpp
     ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc/serializer_reserve.hpp
@@ -411,11 +411,12 @@ export(EXPORT ${PROJECT_NAME}-targets
 # Install generated headers
 install(DIRECTORY ${FLATBUFFERS_GENERATED_ROOT}/sparrow_ipc DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-# Install headers
+# Install public headers (detail/ is internal, not installed)
 install(DIRECTORY ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     PATTERN ".clang-*" EXCLUDE
-    PATTERN "README.md" EXCLUDE)
+    PATTERN "README.md" EXCLUDE
+    PATTERN "detail" EXCLUDE)
 
 install(FILES ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

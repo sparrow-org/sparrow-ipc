@@ -5,8 +5,8 @@
 
 #include "sparrow_ipc/arrow_interface/arrow_array.hpp"
 #include "sparrow_ipc/arrow_interface/arrow_schema.hpp"
-#include "sparrow_ipc/deserialization_context.hpp"
-#include "sparrow_ipc/deserialize_utils.hpp"
+#include "sparrow_ipc/detail/deserialization_context.hpp"
+#include "sparrow_ipc/detail/deserialize_utils.hpp"
 
 namespace sparrow_ipc
 {
