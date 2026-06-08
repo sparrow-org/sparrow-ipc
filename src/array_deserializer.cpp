@@ -7,14 +7,14 @@
 
 #include "array_deserialization_dictionaries.hpp"
 #include "bit_width.hpp"
-#include "sparrow_ipc/detail/deserialize_decimal_array.hpp"
-#include "sparrow_ipc/detail/deserialize_duration_array.hpp"
-#include "sparrow_ipc/detail/deserialize_fixed_size_binary_array.hpp"
-#include "sparrow_ipc/detail/deserialize_interval_array.hpp"
-#include "sparrow_ipc/detail/deserialize_null_array.hpp"
-#include "sparrow_ipc/detail/deserialize_run_end_encoded_array.hpp"
-#include "sparrow_ipc/detail/deserialize_time_related_arrays.hpp"
-#include "sparrow_ipc/detail/deserialize_union_array.hpp"
+#include "detail/deserialize_decimal_array.hpp"
+#include "detail/deserialize_duration_array.hpp"
+#include "detail/deserialize_fixed_size_binary_array.hpp"
+#include "detail/deserialize_interval_array.hpp"
+#include "detail/deserialize_null_array.hpp"
+#include "detail/deserialize_run_end_encoded_array.hpp"
+#include "detail/deserialize_time_related_arrays.hpp"
+#include "detail/deserialize_union_array.hpp"
 #include "sparrow_ipc/dictionary_cache.hpp"
 
 namespace sparrow_ipc

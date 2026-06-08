@@ -99,6 +99,7 @@ target_include_directories(${test_target}
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_BINARY_DIR}/generated
         ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/src
 )
 add_dependencies(${test_target} generate_flatbuffers_headers)
 add_test(NAME sparrow-ipc-tests COMMAND ${test_target})

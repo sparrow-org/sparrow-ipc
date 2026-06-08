@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <optional>
 
-#include "sparrow_ipc/detail/flatbuffer_utils.hpp"
+#include "detail/flatbuffer_utils.hpp"
 #include "sparrow_ipc/utils.hpp"
 
 namespace sparrow_ipc

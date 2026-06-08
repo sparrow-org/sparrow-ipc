@@ -1,4 +1,4 @@
-#include "sparrow_ipc/detail/deserialize_utils.hpp"
+#include "detail/deserialize_utils.hpp"
 
 #include <sparrow/buffer/dynamic_bitset/dynamic_bitset_view.hpp>
 

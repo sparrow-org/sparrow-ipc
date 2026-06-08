@@ -1,5 +1,5 @@
 #include <doctest/doctest.h>
-#include <sparrow_ipc/detail/flatbuffer_utils.hpp>
+#include <detail/flatbuffer_utils.hpp>
 
 #include "sparrow_ipc_tests_helpers.hpp"
 

@@ -3,8 +3,8 @@
 #include <sparrow/arrow_interface/arrow_array_schema_proxy.hpp>
 #include <sparrow/interval_array.hpp>
 
-#include "sparrow_ipc/detail/deserialization_context.hpp"
-#include "sparrow_ipc/detail/deserialize_array_impl.hpp"
+#include "detail/deserialization_context.hpp"
+#include "detail/deserialize_array_impl.hpp"
 
 namespace sparrow_ipc
 {

@@ -16,7 +16,7 @@
 #include "doctest/doctest.h"
 #include "integration_tools.hpp"
 #include "sparrow_ipc/deserialize.hpp"
-#include "sparrow_ipc/detail/flatbuffer_utils.hpp"
+#include "detail/flatbuffer_utils.hpp"
 #include "sparrow_ipc/memory_output_stream.hpp"
 #include "sparrow_ipc/serializer.hpp"
 #include "sparrow_ipc/stream_file_serializer.hpp"

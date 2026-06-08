@@ -14,11 +14,11 @@
 
 #include "sparrow_ipc/arrow_interface/arrow_array.hpp"
 #include "sparrow_ipc/arrow_interface/arrow_schema.hpp"
-#include "sparrow_ipc/detail/deserialization_context.hpp"
-#include "sparrow_ipc/detail/deserialize_primitive_array.hpp"
-#include "sparrow_ipc/detail/deserialize_utils.hpp"
-#include "sparrow_ipc/detail/deserialize_variable_size_binary_array.hpp"
-#include "sparrow_ipc/detail/deserialize_variable_size_binary_view_array.hpp"
+#include "detail/deserialization_context.hpp"
+#include "detail/deserialize_primitive_array.hpp"
+#include "detail/deserialize_utils.hpp"
+#include "detail/deserialize_variable_size_binary_array.hpp"
+#include "detail/deserialize_variable_size_binary_view_array.hpp"
 
 namespace sparrow_ipc
 {

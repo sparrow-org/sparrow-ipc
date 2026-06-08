@@ -4,7 +4,7 @@
 
 #include "sparrow_ipc/flatbuffers_generated/File_generated.h"
 
-#include "sparrow_ipc/detail/flatbuffer_utils.hpp"
+#include "detail/flatbuffer_utils.hpp"
 #include "sparrow_ipc/magic_values.hpp"
 
 namespace sparrow_ipc

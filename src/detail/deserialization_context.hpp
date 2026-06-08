@@ -12,7 +12,7 @@
 #include "sparrow_ipc/flatbuffers_generated/Message_generated.h"
 
 #include "sparrow_ipc/dictionary_cache.hpp"
-#include "sparrow_ipc/detail/metadata.hpp"
+#include "detail/metadata.hpp"
 
 namespace sparrow_ipc
 {
