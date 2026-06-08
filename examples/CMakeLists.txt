@@ -8,7 +8,7 @@ target_link_libraries(write_and_read_streams
     PRIVATE
         sparrow-ipc
         sparrow::sparrow
-        arrow-testing-data 
+        arrow-testing-data
 )
 
 # Create executable for the deserializer_example

@@ -148,6 +148,7 @@ target_link_libraries(test_integration_tools
         integration_tools
         doctest::doctest
         arrow-testing-data
+        flatbuffers::flatbuffers
 )
 
 target_include_directories(test_integration_tools

@@ -300,10 +300,10 @@ target_include_directories(sparrow-ipc
 target_link_libraries(sparrow-ipc 
     PUBLIC
         sparrow::sparrow
-        flatbuffers::flatbuffers
     PRIVATE
         lz4::lz4
         zstd::libzstd
+        flatbuffers::flatbuffers
         )
 
 # Ensure generated headers are available when building sparrow-ipc

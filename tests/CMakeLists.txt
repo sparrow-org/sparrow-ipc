@@ -36,6 +36,7 @@ target_link_libraries(${test_target}
         doctest::doctest
         sparrow::json_reader
         arrow-testing-data
+        flatbuffers::flatbuffers
 )
 
 if(WIN32)
