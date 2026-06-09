@@ -387,9 +387,6 @@ export(EXPORT ${PROJECT_NAME}-targets
     FILE "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Targets.cmake"
     NAMESPACE sparrow-ipc::)
 
-# Install generated headers
-install(DIRECTORY ${FLATBUFFERS_GENERATED_ROOT}/sparrow_ipc DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-
 # Install public headers
 install(DIRECTORY ${SPARROW_IPC_INCLUDE_DIR}/sparrow_ipc
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
