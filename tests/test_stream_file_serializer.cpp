@@ -697,4 +697,54 @@ TEST_SUITE("Stream file serializer tests")
             CHECK_MESSAGE(block.bodyLength() % 8 == 0, "Block ", i, " bodyLength not aligned");
         }
     }
+
+    TEST_CASE("Footer block offset points to the encapsulated message prefix")
+    {
+        std::vector<std::string> names = {"value"};
+        std::vector<int32_t> data = {1, 2, 3, 4};
+        sparrow::primitive_array<int32_t> array(std::move(data));
+        std::vector<sparrow::array> arrays;
+        arrays.emplace_back(std::move(array));
+        sparrow::record_batch batch(names, std::move(arrays));
+
+        std::vector<uint8_t> file_data;
+        sparrow_ipc::memory_output_stream mem_stream(file_data);
+        {
+            sparrow_ipc::stream_file_serializer serializer(mem_stream);
+            serializer << batch << sparrow_ipc::end_file;
+        }
+
+        const auto* footer = sparrow_ipc::get_footer_from_file_data(file_data);
+        REQUIRE(footer != nullptr);
+        REQUIRE(footer->recordBatches() != nullptr);
+        REQUIRE_EQ(footer->recordBatches()->size(), 1);
+
+        const auto& block = *footer->recordBatches()->Get(0);
+        REQUIRE_GE(block.offset(), 0);
+        REQUIRE_GE(block.metaDataLength(), 8);
+        const size_t offset = static_cast<size_t>(block.offset());
+        REQUIRE_LE(offset + 8, file_data.size());
+
+        // The block offset points at the continuation marker, i.e. the start
+        // of the encapsulated IPC message, not past its prefix.
+        const std::span<const uint8_t> file_span(file_data);
+        CHECK(sparrow_ipc::is_continuation(file_span.subspan(offset, 4)));
+
+        // The in-stream metadata_size excludes the 8-byte prefix, whereas the
+        // footer Block.metaDataLength includes it.
+        uint32_t metadata_size = 0;
+        std::memcpy(&metadata_size, file_data.data() + offset + sizeof(uint32_t), sizeof(metadata_size));
+        CHECK_EQ(metadata_size, static_cast<uint32_t>(block.metaDataLength() - 8));
+
+        // The body starts right after the full encapsulated metadata section.
+        const size_t body_offset = offset + static_cast<size_t>(block.metaDataLength());
+        CHECK_EQ(body_offset % 8, 0);
+        REQUIRE_LE(body_offset, file_data.size());
+
+        // The Flatbuffer Message starts after the 8-byte prefix and advertises
+        // the same body length as the footer block.
+        const auto* message = org::apache::arrow::flatbuf::GetMessage(file_data.data() + offset + 8);
+        REQUIRE(message != nullptr);
+        CHECK_EQ(message->bodyLength(), block.bodyLength());
+    }
 }

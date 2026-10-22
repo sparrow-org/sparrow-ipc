@@ -1,5 +1,6 @@
 #include "detail/encapsulated_message.hpp"
 
+#include <cstring>
 #include <stdexcept>
 
 #include "sparrow_ipc/magic_values.hpp"
@@ -19,10 +20,11 @@ namespace sparrow_ipc
         return org::apache::arrow::flatbuf::GetMessage(message_ptr);
     }
 
-    size_t encapsulated_message::metadata_length() const
+    size_t encapsulated_message::metadata_size() const
     {
-        return *(reinterpret_cast<const uint32_t*>(m_data.data() + sizeof(uint32_t)));
-        
+        uint32_t metadata_size = 0;
+        std::memcpy(&metadata_size, m_data.data() + sizeof(uint32_t), sizeof(uint32_t));
+        return metadata_size;
     }
 
     [[nodiscard]] std::variant<
@@ -75,7 +77,7 @@ namespace sparrow_ipc
     std::span<const uint8_t> encapsulated_message::body() const
     {
         const size_t offset = sizeof(uint32_t) * 2  // 4 bytes continuation + 4 bytes metadata size
-                              + metadata_length();
+                              + metadata_size();
         const size_t padded_offset = utils::align_to_8(offset);  // Round up to 8-byte boundary
         if (m_data.size() < padded_offset + body_length())
         {
@@ -87,7 +89,7 @@ namespace sparrow_ipc
     size_t encapsulated_message::total_length() const
     {
         const size_t offset = sizeof(uint32_t) * 2  // 4 bytes continuation + 4 bytes metadata size
-                              + metadata_length();
+                              + metadata_size();
         const size_t padded_offset = utils::align_to_8(offset);  // Round up to 8-byte boundary
         return padded_offset + body_length();
     }
