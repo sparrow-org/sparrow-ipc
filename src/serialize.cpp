@@ -10,15 +10,24 @@ namespace sparrow_ipc
 {
     void common_serialize(const flatbuffers::FlatBufferBuilder& builder, any_output_stream& stream)
     {
-        stream.write(continuation);
-        const flatbuffers::uoffset_t size = builder.GetSize();
-        const int32_t size_with_padding = utils::align_to_8(static_cast<int32_t>(size));
+        // Encapsulated message layout:
+        //   continuation (4) | metadata_size (4) | Message flatbuffer | padding
+        //
+        // The in-stream metadata_size excludes the 8-byte prefix and includes
+        // the padding, so that prefix_size + metadata_size is a multiple of 8.
+        // This mirrors Arrow C++ WriteMessage, where:
+        //   metadata_size = align_to_8(prefix_size + flatbuffer_size) - prefix_size
+        constexpr size_t prefix_size = continuation.size() + sizeof(uint32_t);
+        const size_t flatbuffer_size = builder.GetSize();
+        const size_t padded_message_length = utils::align_to_8(prefix_size + flatbuffer_size);
+        const int32_t metadata_size = static_cast<int32_t>(padded_message_length - prefix_size);
         const std::span<const uint8_t> size_span(
-            reinterpret_cast<const uint8_t*>(&size_with_padding),
+            reinterpret_cast<const uint8_t*>(&metadata_size),
             sizeof(int32_t)
         );
+        stream.write(continuation);
         stream.write(size_span);
-        stream.write(std::span(builder.GetBufferPointer(), size));
+        stream.write(std::span(builder.GetBufferPointer(), flatbuffer_size));
         stream.add_padding();
     }
 
@@ -37,16 +46,17 @@ namespace sparrow_ipc
         // Build and serialize metadata
         flatbuffers::FlatBufferBuilder builder = get_record_batch_message_builder(record_batch, compression, cache);
 
-        // Calculate metadata length for the Block in the footer
-        // According to Arrow spec, metadata_length must be a multiple of 8.
+        // Calculate the metadata length for the Block in the footer.
+        // According to the Arrow spec, metadata_length must be a multiple of 8.
         // The encapsulated message format is:
         //   - continuation (4 bytes)
-        //   - size prefix (4 bytes)
-        //   - flatbuffer metadata (flatbuffer_size bytes)
-        //   - padding to 8-byte boundary
+        //   - metadata_size prefix (4 bytes)
+        //   - Message flatbuffer (flatbuffer_size bytes)
+        //   - padding to an 8-byte boundary
         //
-        // Arrow's WriteMessage returns metadata_length = align_to_8(8 + flatbuffer_size)
-        // which INCLUDES the continuation bytes.
+        // Unlike the in-stream metadata_size field, Block.metaDataLength
+        // INCLUDES the 8-byte prefix. It matches Arrow's WriteMessage
+        // metadata_length = align_to_8(8 + flatbuffer_size).
 
         // Write metadata
         common_serialize(builder, stream);
@@ -94,6 +104,8 @@ namespace sparrow_ipc
         const auto body_length = static_cast<int64_t>(stream.size() - body_start);
         const flatbuffers::uoffset_t flatbuffer_size = builder.GetSize();
         const size_t prefix_size = continuation.size() + sizeof(uint32_t);  // 8 bytes
+        // Block.metaDataLength includes the prefix, unlike the in-stream
+        // metadata_size field.
         const auto metadata_length = static_cast<int32_t>(utils::align_to_8(prefix_size + flatbuffer_size));
         return {.metadata_length = metadata_length, .body_length = body_length};
     }

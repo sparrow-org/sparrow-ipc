@@ -20,7 +20,7 @@ namespace sparrow_ipc
      */
     struct serialized_record_batch_info
     {
-        int32_t metadata_length; ///< Length of the metadata (FlatBuffer message + padding)
+        int32_t metadata_length; ///< Total encapsulated metadata length (8-byte prefix + Message flatbuffer + padding)
         int64_t body_length;     ///< Length of the record batch body (data buffers)
     };
     /**

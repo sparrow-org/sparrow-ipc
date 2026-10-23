@@ -25,8 +25,8 @@ namespace sparrow_ipc
      */
     struct record_batch_block
     {
-        int64_t offset;           ///< Offset from the start of the file to the record batch message
-        int32_t metadata_length;  ///< Length of the metadata (FlatBuffer message)
+        int64_t offset;           ///< Offset from the start of the file to the first byte of the encapsulated message (the continuation marker)
+        int32_t metadata_length;  ///< Total encapsulated metadata length: continuation + length prefix + Message flatbuffer + padding
         int64_t body_length;      ///< Length of the record batch body (data buffers)
     };
 
@@ -237,7 +237,8 @@ namespace sparrow_ipc
                     );
                 });
 
-                // Offset is from the start of the file to the record batch message
+                // Offset from the start of the file to the first byte of the
+                // encapsulated message (the continuation marker)
                 const int64_t offset = static_cast<int64_t>(m_stream.size());
 
                 // Serialize and get block info

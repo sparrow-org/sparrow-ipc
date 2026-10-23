@@ -16,7 +16,10 @@ namespace sparrow_ipc
 
         [[nodiscard]] const org::apache::arrow::flatbuf::Message* flat_buffer_message() const;
 
-        [[nodiscard]] size_t metadata_length() const;
+        /// Size in bytes of the encapsulated message metadata, excluding the
+        /// 8-byte prefix (continuation + length). This is the value stored in
+        /// the metadata_size field of an encapsulated message.
+        [[nodiscard]] size_t metadata_size() const;
 
         [[nodiscard]] std::variant<
             const org::apache::arrow::flatbuf::Schema*,
